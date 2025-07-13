@@ -2,21 +2,20 @@ const express = require("express");
 const router = express.Router();
 const turso = require("../db");
 
-/**
- * GET /users - Retrieve all users from the database
- * @returns {Array} Array of user objects
- */
-router.get("/", async (req, res) => {
-  try {
-    const users = await turso.execute("SELECT * FROM users");
-    res.status(200).json(users);
-  } catch (error) {
-    console.error("Error fetching users:", error);
-    res.status(500).json({ error: "Failed to fetch users" });
+//get user details
+router.get("/:id", async(req, res)=>{
+  try{
+    const { id } = req.params
+    const user = await turso.execute("SELECT * FROM users WHERE user_id = ?",[id])
+    res.status(200).json({data:user.rows})
+  }catch(error){
+    console.error(error);
+    res.status(500).json({ message:"failed to get user", error:error})
   }
 });
 
 
+// create a new user
 router.post("/:id", async (req, res) => {
     try{
         const id = req.params.id;
@@ -25,18 +24,20 @@ router.post("/:id", async (req, res) => {
           "INSERT INTO users (user_id, user_name, first_name, last_name, email, created_at) VALUES (?, ?, ?, ?, ?, ?)",
           [id, userName, firstName, lastName, email, createdAt]
         );
-        res.status(201).json(user);
+        res.status(201).json({data:user.rows});
     }catch(error){
         console.error("Error creating user:", error);
         res.status(500).json({ error: "Failed to create user" });
     }
 });
 
+
+// get all the organizations of the user
 router.get("/get-organizations/:userId", async(req, res)=>{
   try{
     const { userId } = req.params;
     const userOrganizations = turso.execute("SELECT * from members where user_id = ?",[userId]);
-    res.status(200).send(userOrganizations)
+    res.status(200).json({data:userOrganizations.rows})
   }catch(error){
     console.error(error);
     res.status(500).json({ error : error})
@@ -44,6 +45,8 @@ router.get("/get-organizations/:userId", async(req, res)=>{
 });
 
 
+
+// add user to the organization
 router.post("/add-user-to-organization/:userId", async(req, res)=>{
   try{
 
