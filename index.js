@@ -7,6 +7,8 @@ const app = express();
 const usersRouter = require("./routes/users");
 const organizationRouter = require("./routes/organization");
 const membersRouter = require("./routes/members");
+const mock = require('./routes/m')
+const authenticate = require("./middleware/auth")
 
 /**
  * Express middleware configuration
@@ -32,18 +34,9 @@ app.listen(3001, () => {
 /**
  * Route handlers
  */
-app.use("/users", usersRouter);
-app.use("/organization", organizationRouter);
-app.use("/members", membersRouter);
+app.use("/users", authenticate ,usersRouter);
+app.use("/organization", authenticate, organizationRouter);
+app.use("/members", authenticate, membersRouter);
+app.use("/m", authenticate, mock);
 
 module.exports = app;
-
-// USAGE EXAMPLES FOR TURSO CLIENT:
-// TO EXECUTE SQL QUERIES
-// await turso.execute("SELECT * FROM users");
-
-// TO EXECUTE SQL QUERIES WITH ARGUMENTS
-// await turso.execute({
-//   sql: "SELECT * FROM users WHERE id = ?",
-//   args: [1],
-// });
