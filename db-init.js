@@ -86,6 +86,25 @@ async function init() {
   `);
 
   console.log('✅ All tables created (or already exist).');
+
+  // ── Migrations (safe to run multiple times) ──────────────────────────────
+
+  // Add org_id to projects if it doesn't exist yet (added in Clerk migration)
+  try {
+    await turso.execute('ALTER TABLE projects ADD COLUMN org_id TEXT');
+    console.log('🔄 Migration: added org_id column to projects');
+  } catch (e) {
+    // Column already exists — ignore
+  }
+
+  // Drop password_hash from users (removed when migrating to Clerk auth)
+  try {
+    await turso.execute('ALTER TABLE users DROP COLUMN password_hash');
+    console.log('🔄 Migration: dropped password_hash from users');
+  } catch (e) {
+    // Column doesn't exist or already dropped — ignore
+  }
+
   process.exit(0);
 }
 
