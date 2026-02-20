@@ -16,104 +16,90 @@
 
 ---
 
-## 1. Authentication
+## Authentication Model — Clerk
 
-### `POST /auth/register`
-Create a new user account.
+**MockBird uses [Clerk](https://clerk.com) for authentication.** The backend does not handle registration, login, or password management — Clerk's frontend SDK does all of that.
 
-**Request**
-```json
-{
-  "email": "user@example.com",
-  "password": "YourPassword123",
-  "name": "John Doe"
-}
-```
+### How it works
 
-**Response `201 Created`**
-```json
-{
-  "token": "<jwt_token>",
-  "user": {
-    "userId": "uuid",
-    "email": "user@example.com",
-    "name": "John Doe",
-    "subscriptionTier": "free"
-  }
-}
-```
+1. The frontend authenticates the user via Clerk (sign-in widget / `useAuth()` hook)
+2. The frontend gets a short-lived session token from Clerk:
+   ```js
+   // Next.js App Router
+   const { getToken } = useAuth();
+   const token = await getToken();
 
-**Errors**
-| Status | Reason |
-|--------|--------|
-| `400` | Missing `email`, `password`, or `name` |
-| `409` | Email already registered |
+   // or with Clerk's fetch helper
+   const token = await clerk.session.getToken();
+   ```
+3. That token is sent on every API request as a Bearer header:
+   ```
+   Authorization: Bearer <clerk_session_token>
+   ```
+4. **On first login**, the frontend must call `GET /auth/me` to sync the Clerk user into MockBird's database.
 
 ---
 
-### `POST /auth/login`
-Log in with existing credentials.
-
-**Request**
-```json
-{
-  "email": "user@example.com",
-  "password": "YourPassword123"
-}
-```
-
-**Response `200 OK`**
-```json
-{
-  "token": "<jwt_token>",
-  "user": {
-    "userId": "uuid",
-    "email": "user@example.com",
-    "name": "John Doe",
-    "subscriptionTier": "free"
-  }
-}
-```
-
-**Errors**
-| Status | Reason |
-|--------|--------|
-| `400` | Missing email or password |
-| `401` | Invalid credentials |
-
----
-
-### `GET /auth/me`
-Get the currently logged-in user's profile.
+### `GET /auth/me` ⚠️ Call this after every login
+Syncs the authenticated Clerk user into MockBird's local DB (upsert) and returns their profile. Must be called at least once after login before using any other endpoint.
 
 **Headers (required)**
 ```
-Authorization: Bearer <jwt_token>
+Authorization: Bearer <clerk_session_token>
 ```
 
 **Response `200 OK`**
 ```json
 {
-  "userId": "uuid",
+  "userId": "user_2abc123",
   "email": "user@example.com",
   "name": "John Doe",
   "subscriptionTier": "free",
-  "createdAt": "2026-02-20T12:07:40.455Z"
+  "createdAt": "2026-02-20T12:07:40.455Z",
+  "orgId": "org_xyz789",
+  "orgRole": "org:admin"
 }
 ```
+
+> - `userId` — Clerk's user ID (e.g. `user_2abc123`). Use this wherever a user ID is needed.
+> - `orgId` — The active Clerk organization ID, if the user has switched into one. `null` if personal context.
+> - `orgRole` — The user's role in the org (`org:admin`, `org:member`). `null` if no org context.
 
 **Errors**
 | Status | Reason |
 |--------|--------|
-| `401` | Missing or invalid token |
-| `404` | User not found |
+| `401` | Missing or invalid Clerk session token |
+
+---
+
+### Organization Context
+
+Clerk supports organizations (teams). When a user switches to an org in the frontend:
+```js
+await clerk.setActive({ organization: 'org_xyz789' });
+```
+The session token automatically includes `orgId`. MockBird uses this to scope projects to the org — all org members share the same projects.
+
+- **No `orgId` in token** → personal projects (user-scoped)
+- **`orgId` present in token** → org projects (shared across all org members)
+
+No extra headers or params are needed — it's all handled via the session token.
+
+---
+
+### Auth Errors (applies to all protected routes)
+
+`401 Unauthorized`:
+```json
+{ "error": "Unauthenticated" }
+```
 
 ---
 
 ## 2. Projects
 
-> All project endpoints require `Authorization: Bearer <jwt_token>`.
-> Users can only see and modify their own projects.
+> All project endpoints require `Authorization: Bearer <clerk_session_token>`.
+> Projects are automatically scoped to the **user** or **organization** based on the session token.
 
 ---
 
@@ -129,7 +115,8 @@ List all projects for the authenticated user.
       "name": "My API",
       "description": "Test project",
       "slug": "my-api",
-      "user_id": "uuid",
+      "user_id": "user_2abc123",
+      "org_id": "org_xyz789",
       "is_public": 0,
       "mock_count": 5,
       "created_at": "2026-02-20T12:08:05.589Z",
@@ -141,6 +128,7 @@ List all projects for the authenticated user.
 
 > `mock_count` — total number of mock endpoints in this project  
 > `is_public` — `0` = private, `1` = public  
+> `org_id` — set when project was created in an org context, `null` for personal projects  
 > `slug` — URL-safe ID used in mock execution URLs (auto-generated from name)
 
 ---
@@ -596,10 +584,8 @@ OPTIONS preflight returns `204 No Content`.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `POST` | `/auth/register` | ❌ | Register |
-| `POST` | `/auth/login` | ❌ | Login |
-| `GET` | `/auth/me` | ✅ | Get current user |
-| `GET` | `/projects` | ✅ | List projects |
+| `GET` | `/auth/me` | ✅ | Sync Clerk user to DB + get profile |
+| `GET` | `/projects` | ✅ | List projects (user or org scoped) |
 | `POST` | `/projects` | ✅ | Create project |
 | `GET` | `/projects/:id` | ✅ | Get project + mocks |
 | `PUT` | `/projects/:id` | ✅ | Update project |
@@ -613,4 +599,7 @@ OPTIONS preflight returns `204 No Content`.
 | `POST` | `/mocks/:id/responses` | ✅ | Add response |
 | `PUT` | `/mocks/:id/responses/:rid` | ✅ | Update response |
 | `DELETE` | `/mocks/:id/responses/:rid` | ✅ | Delete response |
-| `ANY` | `/m/:slug/*path` | ❌ | **Execute mock** |
+| `ANY` | `/m/:slug/*path` | ❌ | **Execute mock** (public) |
+
+> ✅ = requires `Authorization: Bearer <clerk_session_token>`  
+> ❌ = no auth required
