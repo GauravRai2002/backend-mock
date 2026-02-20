@@ -104,14 +104,20 @@ async function logRequest({ mockId, projectId, req, responseStatus, responseTime
 /**
  * Main mock handler — matches all methods on /m/:projectSlug/{*path}
  * This is a PUBLIC endpoint — no auth required.
- * Express 5 requires named wildcards: {*path}
+ *
+ * NOTE: Express 5's {*path} wildcard returns segments joined by commas,
+ * NOT slashes (e.g. "api,new-endpoint" instead of "api/new-endpoint").
+ * We reconstruct the real path from req.path by stripping /:projectSlug.
  */
 router.all('/:projectSlug/{*path}', async (req, res) => {
     const startTime = Date.now();
     const { projectSlug } = req.params;
-    // Express 5: named wildcard {*path} is accessed via req.params.path
-    const mockPath = '/' + (req.params.path || '');
+
+    // Strip "/:projectSlug" from req.path to get the real mock path with slashes
+    // req.path here is e.g. "/new-mock/api/new-endpoint" → mockPath = "/api/new-endpoint"
+    const mockPath = req.path.replace(/^\/[^/]+/, '') || '/';
     const method = req.method.toUpperCase();
+
 
     // Always add CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
