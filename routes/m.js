@@ -62,14 +62,38 @@ async function findMatchingMock(projectId, requestPath, method) {
 }
 
 /**
- * Pick the response to return.
- * If there's a default response, use it. Otherwise use the first one.
+ * Pick the response to return using weighted random selection.
+ *
+ * How it works:
+ * - Each response has a `weight` (default 100).
+ * - A random number is rolled against the total weight pool.
+ * - Responses with higher weight are proportionally more likely to be selected.
+ * - If only one response exists, it is always returned.
+ * - If all weights are 0, falls back to the is_default response (or first).
+ *
+ * Example: weights [70, 20, 10] → 70%, 20%, 10% chance respectively.
  */
 function pickResponse(responses) {
     if (!responses || responses.length === 0) return null;
-    const defaultResp = responses.find((r) => r.is_default === 1);
-    return defaultResp || responses[0];
+    if (responses.length === 1) return responses[0];
+
+    const totalWeight = responses.reduce((sum, r) => sum + (r.weight || 0), 0);
+
+    // If all weights are 0, fall back to default or first
+    if (totalWeight === 0) {
+        return responses.find((r) => r.is_default === 1) || responses[0];
+    }
+
+    let roll = Math.random() * totalWeight;
+    for (const resp of responses) {
+        roll -= (resp.weight || 0);
+        if (roll <= 0) return resp;
+    }
+
+    // Fallback (floating point edge case)
+    return responses[responses.length - 1];
 }
+
 
 /**
  * Log the request asynchronously (don't block the response).
