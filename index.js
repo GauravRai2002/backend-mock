@@ -14,6 +14,7 @@ const mockRouter = require("./routes/m");
 const authRouter = require("./routes/auth");
 const projectsRouter = require("./routes/projects");
 const mocksRouter = require("./routes/mocks");
+const organizationsRouter = require("./routes/organizations");
 const authenticate = require("./middleware/auth");
 
 /**
@@ -53,6 +54,7 @@ app.use("/m", mockRouter);
  */
 app.use("/projects", authenticate, projectsRouter);
 app.use("/", authenticate, mocksRouter);
+app.use("/organizations", authenticate, organizationsRouter);
 
 // Legacy routes
 app.use("/users", authenticate, usersRouter);

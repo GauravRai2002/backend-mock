@@ -5,12 +5,9 @@ const turso = require('../db');
 
 /**
  * GET /auth/me
- *
- * Called by the frontend after Clerk login to sync the Clerk user into
- * our local DB (upsert). Returns the local user record.
- *
- * The Clerk session token must be passed as:
- *   Authorization: Bearer <session_token>
+ * Syncs Clerk user into local DB (upsert). Returns full user profile.
+ * If user is in an org context, also returns org name + role.
+ * ⚠️ Must be called after every Clerk login.
  */
 router.get('/me', async (req, res) => {
     try {
@@ -24,9 +21,10 @@ router.get('/me', async (req, res) => {
         const clerkUser = await clerkClient.users.getUser(userId);
         const email = clerkUser.emailAddresses?.[0]?.emailAddress || '';
         const name = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim();
+        const imageUrl = clerkUser.imageUrl || null;
         const now = new Date().toISOString();
 
-        // Upsert into local users table — keyed on Clerk userId
+        // Upsert into local users table
         await turso.execute(
             `INSERT INTO users (user_id, email, name, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?)
@@ -41,21 +39,78 @@ router.get('/me', async (req, res) => {
             'SELECT user_id, email, name, subscription_tier, created_at FROM users WHERE user_id = ?',
             [userId]
         );
-
         const user = result.rows[0];
+
+        // Fetch org name from Clerk if user is in an org context
+        let orgName = null;
+        let orgSlug = null;
+        if (orgId) {
+            try {
+                const org = await clerkClient.organizations.getOrganization({ organizationId: orgId });
+                orgName = org.name;
+                orgSlug = org.slug;
+            } catch (_) {
+                // org fetch can fail gracefully
+            }
+        }
+
         res.status(200).json({
             userId: user.user_id,
             email: user.email,
             name: user.name,
+            imageUrl,
             subscriptionTier: user.subscription_tier,
             createdAt: user.created_at,
-            // Clerk org context (if user is acting within an org)
             orgId: orgId || null,
             orgRole: orgRole || null,
+            orgName,
+            orgSlug,
         });
     } catch (error) {
         console.error('GET /auth/me error:', error);
         res.status(500).json({ error: 'Failed to fetch user' });
+    }
+});
+
+/**
+ * PATCH /auth/profile
+ * Update the authenticated user's display name.
+ * Updates both Clerk (source of truth) and local DB.
+ */
+router.patch('/profile', async (req, res) => {
+    try {
+        const { userId } = getAuth(req);
+        const { firstName, lastName } = req.body;
+
+        if (!firstName && !lastName) {
+            return res.status(400).json({ error: 'At least firstName or lastName is required' });
+        }
+
+        // Update in Clerk
+        const updatedClerkUser = await clerkClient.users.updateUser(userId, {
+            ...(firstName !== undefined && { firstName }),
+            ...(lastName !== undefined && { lastName }),
+        });
+
+        const name = `${updatedClerkUser.firstName || ''} ${updatedClerkUser.lastName || ''}`.trim();
+        const now = new Date().toISOString();
+
+        // Sync to local DB
+        await turso.execute(
+            'UPDATE users SET name = ?, updated_at = ? WHERE user_id = ?',
+            [name, now, userId]
+        );
+
+        res.status(200).json({
+            userId,
+            name,
+            firstName: updatedClerkUser.firstName,
+            lastName: updatedClerkUser.lastName,
+            imageUrl: updatedClerkUser.imageUrl,
+        });
+    } catch (error) {
+        console.error('PATCH /auth/profile error:', error);
+        res.status(500).json({ error: 'Failed to update profile' });
     }
 });
 

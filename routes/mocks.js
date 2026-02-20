@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router({ mergeParams: true });
 const { v4: uuidv4 } = require('uuid');
+const { getAuth } = require('@clerk/express');
 const turso = require('../db');
 const authenticate = require('../middleware/auth');
 
@@ -305,6 +306,91 @@ router.delete('/mocks/:id/responses/:responseId', async (req, res) => {
     } catch (error) {
         console.error('Delete response error:', error);
         res.status(500).json({ error: 'Failed to delete response' });
+    }
+});
+
+// ─── REQUEST LOGS ─────────────────────────────────────────────────────────────
+
+// GET /mocks/:id/request-logs?page=1&limit=50&startDate=&endDate=
+router.get('/mocks/:id/request-logs', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(100, parseInt(req.query.limit) || 50);
+        const offset = (page - 1) * limit;
+        const { startDate, endDate } = req.query;
+
+        let dateFilter = '';
+        const dateValues = [];
+        if (startDate) { dateFilter += ' AND created_at >= ?'; dateValues.push(startDate); }
+        if (endDate) { dateFilter += ' AND created_at <= ?'; dateValues.push(endDate); }
+
+        const [logsResult, countResult] = await Promise.all([
+            turso.execute(
+                `SELECT * FROM request_logs
+                 WHERE mock_id = ? ${dateFilter}
+                 ORDER BY created_at DESC
+                 LIMIT ? OFFSET ?`,
+                [id, ...dateValues, limit, offset]
+            ),
+            turso.execute(
+                `SELECT COUNT(*) as total FROM request_logs WHERE mock_id = ? ${dateFilter}`,
+                [id, ...dateValues]
+            ),
+        ]);
+
+        const total = countResult.rows[0]?.total ?? 0;
+        res.status(200).json({
+            data: logsResult.rows,
+            pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+        });
+    } catch (error) {
+        console.error('GET /mocks/:id/request-logs error:', error);
+        res.status(500).json({ error: 'Failed to fetch request logs' });
+    }
+});
+
+// ─── DUPLICATE ────────────────────────────────────────────────────────────────
+
+// POST /mocks/:id/duplicate — clone a single mock with all its responses
+router.post('/mocks/:id/duplicate', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const mockResult = await turso.execute(
+            `SELECT m.* FROM mocks m
+             INNER JOIN projects p ON m.project_id = p.project_id
+             WHERE m.mock_id = ? AND p.user_id = ?`,
+            [id, getAuth(req).userId]
+        );
+        const original = mockResult.rows[0];
+        if (!original) return res.status(404).json({ error: 'Mock not found' });
+
+        const newMockId = uuidv4();
+        const now = new Date().toISOString();
+
+        await turso.execute(
+            `INSERT INTO mocks (mock_id, project_id, name, path, method, description, is_active, response_type, response_delay_ms, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [newMockId, original.project_id, `${original.name} (Copy)`,
+                original.path, original.method, original.description,
+                original.is_active, original.response_type, original.response_delay_ms, now, now]
+        );
+
+        const responses = await turso.execute('SELECT * FROM mock_responses WHERE mock_id = ?', [id]);
+        for (const resp of responses.rows) {
+            await turso.execute(
+                `INSERT INTO mock_responses (response_id, mock_id, name, status_code, headers, body, is_default, weight, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [uuidv4(), newMockId, resp.name, resp.status_code, resp.headers, resp.body, resp.is_default, resp.weight, now]
+            );
+        }
+
+        const newMock = await turso.execute('SELECT * FROM mocks WHERE mock_id = ?', [newMockId]);
+        res.status(201).json({ data: newMock.rows[0] });
+    } catch (error) {
+        console.error('POST /mocks/:id/duplicate error:', error);
+        res.status(500).json({ error: 'Failed to duplicate mock' });
     }
 });
 
