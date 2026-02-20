@@ -17,7 +17,7 @@ router.get('/projects/:projectId/mocks', async (req, res) => {
         // Verify project ownership
         const project = await turso.execute(
             'SELECT project_id FROM projects WHERE project_id = ? AND user_id = ?',
-            [projectId, req.user.userId]
+            [projectId, getAuth(req).userId]
         );
         if (project.rows.length === 0) {
             return res.status(404).json({ error: 'Project not found' });
@@ -51,7 +51,7 @@ router.post('/projects/:projectId/mocks', async (req, res) => {
         // Verify project ownership
         const project = await turso.execute(
             'SELECT project_id FROM projects WHERE project_id = ? AND user_id = ?',
-            [projectId, req.user.userId]
+            [projectId, getAuth(req).userId]
         );
         if (project.rows.length === 0) {
             return res.status(404).json({ error: 'Project not found' });
@@ -89,7 +89,7 @@ router.get('/mocks/:id', async (req, res) => {
             `SELECT m.* FROM mocks m
        INNER JOIN projects p ON m.project_id = p.project_id
        WHERE m.mock_id = ? AND p.user_id = ?`,
-            [id, req.user.userId]
+            [id, getAuth(req).userId]
         );
         const mock = mockResult.rows[0];
         if (!mock) {
@@ -119,7 +119,7 @@ router.put('/mocks/:id', async (req, res) => {
             `SELECT m.mock_id FROM mocks m
        INNER JOIN projects p ON m.project_id = p.project_id
        WHERE m.mock_id = ? AND p.user_id = ?`,
-            [id, req.user.userId]
+            [id, getAuth(req).userId]
         );
         if (existing.rows.length === 0) {
             return res.status(404).json({ error: 'Mock not found' });
@@ -164,7 +164,7 @@ router.delete('/mocks/:id', async (req, res) => {
             `SELECT m.mock_id FROM mocks m
        INNER JOIN projects p ON m.project_id = p.project_id
        WHERE m.mock_id = ? AND p.user_id = ?`,
-            [id, req.user.userId]
+            [id, getAuth(req).userId]
         );
         if (existing.rows.length === 0) {
             return res.status(404).json({ error: 'Mock not found' });
@@ -206,7 +206,7 @@ router.post('/mocks/:id/responses', async (req, res) => {
             `SELECT m.mock_id FROM mocks m
        INNER JOIN projects p ON m.project_id = p.project_id
        WHERE m.mock_id = ? AND p.user_id = ?`,
-            [id, req.user.userId]
+            [id, getAuth(req).userId]
         );
         if (mockCheck.rows.length === 0) {
             return res.status(404).json({ error: 'Mock not found' });

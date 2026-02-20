@@ -3,6 +3,7 @@ const dotenv = require("dotenv");
 dotenv.config();
 
 const express = require("express");
+const { clerkMiddleware } = require("@clerk/express");
 const app = express();
 
 // Route imports
@@ -16,36 +17,44 @@ const mocksRouter = require("./routes/mocks");
 const authenticate = require("./middleware/auth");
 
 /**
- * Express middleware configuration
+ * Global middleware
  */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
 /**
- * Health check
+ * Clerk middleware — must come before any route that needs auth.
+ * Parses the Clerk session token and populates req.auth on every request.
+ * does NOT block unauthenticated requests — use authenticate for that.
+ */
+app.use(clerkMiddleware());
+
+/**
+ * Health check (public)
  */
 app.get("/", (req, res) => {
   res.status(200).json({ status: "ok", app: "MockBird API" });
 });
 
 /**
- * Public routes — no auth required
+ * Auth routes — /auth/me is protected via authenticate inside the router
  */
-app.use("/auth", authRouter);
+app.use("/auth", authenticate, authRouter);
 
-// Mock execution endpoint — PUBLIC (clients hit this from anywhere)
+/**
+ * Mock execution — PUBLIC, no auth required.
+ * Clients (and the frontend) hit this from anywhere.
+ */
 app.use("/m", mockRouter);
 
 /**
- * Protected routes — require JWT
+ * Protected management routes
  */
 app.use("/projects", authenticate, projectsRouter);
-
-// Mocks CRUD uses both /projects/:projectId/mocks and /mocks/:id patterns
 app.use("/", authenticate, mocksRouter);
 
-// Legacy / existing routes
+// Legacy routes
 app.use("/users", authenticate, usersRouter);
 app.use("/organization", authenticate, organizationRouter);
 app.use("/members", authenticate, membersRouter);

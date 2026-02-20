@@ -3,12 +3,11 @@ const turso = require('./db');
 async function init() {
   console.log('🔧 Initializing database tables...');
 
-  // Users
+  // Users (Clerk is the auth source — user_id is the Clerk userId, no password stored)
   await turso.execute(`
     CREATE TABLE IF NOT EXISTS users (
       user_id TEXT PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
       name TEXT,
       subscription_tier TEXT DEFAULT 'free',
       created_at TEXT DEFAULT (datetime('now')),
@@ -16,7 +15,7 @@ async function init() {
     )
   `);
 
-  // Projects
+  // Projects — can be owned by a user OR a Clerk organization (org_id)
   await turso.execute(`
     CREATE TABLE IF NOT EXISTS projects (
       project_id TEXT PRIMARY KEY,
@@ -24,6 +23,7 @@ async function init() {
       description TEXT,
       slug TEXT UNIQUE NOT NULL,
       user_id TEXT NOT NULL,
+      org_id TEXT,
       is_public INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
