@@ -43,6 +43,13 @@ async function findMatchingMock(projectId, requestPath, method) {
  */
 async function logRequest({ mockId, projectId, req, responseStatus, responseTimeMs }) {
     try {
+        // Sanitize headers to prevent logging sensitive tokens
+        const sanitizedHeaders = { ...req.headers };
+        delete sanitizedHeaders['cookie'];
+        delete sanitizedHeaders['authorization'];
+        delete sanitizedHeaders['set-cookie'];
+        delete sanitizedHeaders['x-api-key'];
+
         await turso.execute(
             `INSERT INTO request_logs 
         (log_id, mock_id, project_id, request_path, request_method, request_headers, request_body, request_query, response_status, response_time_ms, ip_address, user_agent, created_at)
@@ -53,7 +60,7 @@ async function logRequest({ mockId, projectId, req, responseStatus, responseTime
                 projectId || null,
                 req.path,
                 req.method,
-                JSON.stringify(req.headers),
+                JSON.stringify(sanitizedHeaders),
                 typeof req.body === 'object' ? JSON.stringify(req.body) : (req.body || ''),
                 JSON.stringify(req.query),
                 responseStatus,
