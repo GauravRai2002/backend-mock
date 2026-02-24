@@ -76,7 +76,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Add to Cart', path: '/cart/items', method: 'POST',
-                description: 'Add a product to the shopping cart.\n\nExpected JSON Body:\n{\n  "productId": 1,\n  "quantity": 2\n}',
+                description: 'Add a product to the shopping cart.\n\nExpected JSON Body:\n{\n  "productId": 1,\n  "quantity": 2\n}', expectedBody: "{\n  \"productId\": 1,\n  \"quantity\": 2\n}",
                 responses: [
                     resp('Added', 201, { cartId: 'cart_abc123', items: [{ productId: 1, name: 'Wireless Headphones', quantity: 2, unitPrice: 99.99, subtotal: 199.98 }], total: 199.98, itemCount: 2 }, { isDefault: true }),
                     resp('Out of Stock', 400, { error: 'OUT_OF_STOCK', message: 'Requested quantity exceeds available stock' }, { conditions: [{ type: 'body', field: 'quantity', operator: 'regex', value: '^[1-9][0-9]{2,}$' }] })
@@ -91,7 +91,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Checkout', path: '/checkout', method: 'POST',
-                description: 'Process payment and complete order.\n\nExpected JSON Body:\n{\n  "cartId": "cart_abc123",\n  "paymentMethod": "card",\n  "shippingAddress": {\n    "line1": "123 Main St",\n    "city": "San Francisco",\n    "state": "CA",\n    "zip": "94102"\n  }\n}',
+                description: 'Process payment and complete order.\n\nExpected JSON Body:\n{\n  "cartId": "cart_abc123",\n  "paymentMethod": "card",\n  "shippingAddress": {\n    "line1": "123 Main St",\n    "city": "San Francisco",\n    "state": "CA",\n    "zip": "94102"\n  }\n}', expectedBody: "{\n  \"cartId\": \"cart_abc123\",\n  \"paymentMethod\": \"card\",\n  \"shippingAddress\": {\n    \"line1\": \"123 Main St\",\n    \"city\": \"San Francisco\",\n    \"state\": \"CA\",\n    \"zip\": \"94102\"\n  }\n}",
                 responses: [
                     resp('Success', 200, { orderId: 'ORD-8X9Y2Z', status: 'confirmed', paymentStatus: 'paid', estimatedDelivery: '2025-03-05', trackingUrl: null }, { isDefault: true }),
                     resp('Payment Failed', 402, { error: 'PAYMENT_DECLINED', message: 'Card declined by issuing bank. Try a different payment method.' }, { conditions: [{ type: 'body', field: 'paymentMethod', operator: 'equals', value: 'declined_card' }] })
@@ -109,7 +109,7 @@ const TEMPLATES = [
         mocks: [
             {
                 name: 'Register', path: '/auth/register', method: 'POST',
-                description: 'Create a new user account.\n\nExpected JSON Body:\n{\n  "email": "user@example.com",\n  "password": "securepassword123",\n  "name": "John Doe"\n}',
+                description: 'Create a new user account.\n\nExpected JSON Body:\n{\n  "email": "user@example.com",\n  "password": "securepassword123",\n  "name": "John Doe"\n}', expectedBody: "{\n  \"email\": \"user@example.com\",\n  \"password\": \"securepassword123\",\n  \"name\": \"John Doe\"\n}",
                 responses: [
                     resp('Created', 201, { userId: 'us_abc123', email: 'user@example.com', name: 'John Doe', token: 'eyJhbGciOiJIUzI1NiJ9.mock_access_token', refreshToken: 'rt_mock_refresh_abc', expiresIn: 3600 }, { isDefault: true }),
                     resp('Email Taken', 409, { error: 'EMAIL_EXISTS', message: 'An account with this email already exists' }, { conditions: [{ type: 'body', field: 'email', operator: 'equals', value: 'admin@example.com' }] }),
@@ -118,7 +118,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Login', path: '/auth/login', method: 'POST',
-                description: 'Authenticate and receive tokens.\n\nExpected JSON Body:\n{\n  "email": "user@example.com",\n  "password": "securepassword123"\n}',
+                description: 'Authenticate and receive tokens.\n\nExpected JSON Body:\n{\n  "email": "user@example.com",\n  "password": "securepassword123"\n}', expectedBody: "{\n  \"email\": \"user@example.com\",\n  \"password\": \"securepassword123\"\n}",
                 responses: [
                     resp('Success', 200, { token: 'eyJhbGciOiJIUzI1NiJ9.mock_access_token', refreshToken: 'rt_mock_refresh_abc', expiresIn: 3600, user: { id: 'us_abc123', email: 'user@example.com', role: 'user' } }, { isDefault: true }),
                     resp('Invalid Credentials', 401, { error: 'INVALID_CREDENTIALS', message: 'Invalid email or password' }, { conditions: [{ type: 'body', field: 'password', operator: 'equals', value: 'wrongpassword' }] })
@@ -126,7 +126,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Get Current User', path: '/auth/me', method: 'GET',
-                description: 'Get the currently authenticated user profile.\n\nExpected Headers:\nAuthorization: Bearer <token>',
+                description: 'Get the currently authenticated user profile.\n\nExpected Headers:\nAuthorization: Bearer <token>', expectedHeaders: "{\"Authorization\":\"Bearer <token>\"}",
                 responses: [
                     resp('Success', 200, { id: 'us_abc123', email: 'user@example.com', name: 'John Doe', role: 'user', verified: true, avatar: 'https://placehold.co/100x100?text=JD', createdAt: '2025-01-15T10:30:00Z' }, { isDefault: true }),
                     resp('Unauthorized', 401, { error: 'UNAUTHORIZED', message: 'Token expired or invalid' }, { conditions: [{ type: 'header', field: 'authorization', operator: 'equals', value: 'Bearer expired_token' }] })
@@ -134,7 +134,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Refresh Token', path: '/auth/refresh', method: 'POST',
-                description: 'Exchange a refresh token for a new access token.\n\nExpected JSON Body:\n{\n  "refreshToken": "rt_mock_refresh_abc"\n}',
+                description: 'Exchange a refresh token for a new access token.\n\nExpected JSON Body:\n{\n  "refreshToken": "rt_mock_refresh_abc"\n}', expectedBody: "{\n  \"refreshToken\": \"rt_mock_refresh_abc\"\n}",
                 responses: [
                     resp('Refreshed', 200, { token: 'eyJhbGciOiJIUzI1NiJ9.new_mock_token', refreshToken: 'rt_mock_refresh_new', expiresIn: 3600 }, { isDefault: true }),
                     resp('Invalid Token', 401, { error: 'INVALID_REFRESH_TOKEN', message: 'Refresh token is expired or revoked' }, { conditions: [{ type: 'body', field: 'refreshToken', operator: 'equals', value: 'invalid' }] })
@@ -142,7 +142,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Forgot Password', path: '/auth/forgot-password', method: 'POST',
-                description: 'Request a password reset email.\n\nExpected JSON Body:\n{\n  "email": "user@example.com"\n}',
+                description: 'Request a password reset email.\n\nExpected JSON Body:\n{\n  "email": "user@example.com"\n}', expectedBody: "{\n  \"email\": \"user@example.com\"\n}",
                 responses: [
                     resp('Email Sent', 200, { message: 'If an account with that email exists, a reset link has been sent.' }, { isDefault: true })
                 ]
@@ -170,7 +170,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Create Task', path: '/todos', method: 'POST',
-                description: 'Create a new task.\n\nExpected JSON Body:\n{\n  "title": "New Task",\n  "priority": "medium",\n  "dueDate": "2025-04-01"\n}',
+                description: 'Create a new task.\n\nExpected JSON Body:\n{\n  "title": "New Task",\n  "priority": "medium",\n  "dueDate": "2025-04-01"\n}', expectedBody: "{\n  \"title\": \"New Task\",\n  \"priority\": \"medium\",\n  \"dueDate\": \"2025-04-01\"\n}",
                 responses: [
                     resp('Created', 201, { id: 4, title: 'New Task', completed: false, priority: 'medium', dueDate: '2025-04-01', createdAt: '2025-02-25T12:00:00Z' }, { isDefault: true }),
                     resp('Validation Error', 400, { error: 'VALIDATION_ERROR', message: 'title is required' }, { conditions: [{ type: 'body', field: 'title', operator: 'equals', value: '' }] })
@@ -178,7 +178,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Update Task', path: '/todos/{id}', method: 'PUT',
-                description: 'Update an existing task.\n\nExpected JSON Body:\n{\n  "title": "Updated title",\n  "completed": true,\n  "priority": "high"\n}',
+                description: 'Update an existing task.\n\nExpected JSON Body:\n{\n  "title": "Updated title",\n  "completed": true,\n  "priority": "high"\n}', expectedBody: "{\n  \"title\": \"Updated title\",\n  \"completed\": true,\n  \"priority\": \"high\"\n}",
                 responses: [
                     resp('Updated', 200, { id: 1, title: 'Updated title', completed: true, priority: 'high', dueDate: '2025-03-01', updatedAt: '2025-02-25T12:05:00Z' }, { isDefault: true })
                 ]
@@ -216,7 +216,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Create Post', path: '/posts', method: 'POST',
-                description: 'Create a new post.\n\nExpected JSON Body:\n{\n  "content": "Hello world!",\n  "imageUrl": "https://example.com/photo.jpg"\n}',
+                description: 'Create a new post.\n\nExpected JSON Body:\n{\n  "content": "Hello world!",\n  "imageUrl": "https://example.com/photo.jpg"\n}', expectedBody: "{\n  \"content\": \"Hello world!\",\n  \"imageUrl\": \"https://example.com/photo.jpg\"\n}",
                 responses: [
                     resp('Created', 201, { id: 'post_new', content: 'Hello world!', imageUrl: null, likes: 0, comments: 0, createdAt: '2025-02-25T10:00:00Z' }, { isDefault: true })
                 ]
@@ -285,7 +285,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Create Article', path: '/articles', method: 'POST',
-                description: 'Create a new article (draft by default).\n\nExpected JSON Body:\n{\n  "title": "My New Article",\n  "content": "Full markdown content here...",\n  "category": "Tutorial",\n  "tags": ["api", "guide"],\n  "status": "draft"\n}',
+                description: 'Create a new article (draft by default).\n\nExpected JSON Body:\n{\n  "title": "My New Article",\n  "content": "Full markdown content here...",\n  "category": "Tutorial",\n  "tags": ["api", "guide"],\n  "status": "draft"\n}', expectedBody: "{\n  \"title\": \"My New Article\",\n  \"content\": \"Full markdown content here...\",\n  \"category\": \"Tutorial\",\n  \"tags\": [\"api\", \"guide\"],\n  \"status\": \"draft\"\n}",
                 responses: [
                     resp('Created', 201, { id: 'art_new', title: 'My New Article', slug: 'my-new-article', status: 'draft', createdAt: '2025-02-25T10:00:00Z' }, { isDefault: true })
                 ]
@@ -314,7 +314,7 @@ const TEMPLATES = [
         mocks: [
             {
                 name: 'Create Charge', path: '/charges', method: 'POST',
-                description: 'Create a new payment charge.\n\nExpected JSON Body:\n{\n  "amount": 4999,\n  "currency": "usd",\n  "source": "tok_visa",\n  "description": "Order #1234"\n}',
+                description: 'Create a new payment charge.\n\nExpected JSON Body:\n{\n  "amount": 4999,\n  "currency": "usd",\n  "source": "tok_visa",\n  "description": "Order #1234"\n}', expectedBody: "{\n  \"amount\": 4999,\n  \"currency\": \"usd\",\n  \"source\": \"tok_visa\",\n  \"description\": \"Order #1234\"\n}",
                 responses: [
                     resp('Charged', 201, { id: 'ch_1abc', amount: 4999, currency: 'usd', status: 'succeeded', source: { brand: 'Visa', last4: '4242' }, description: 'Order #1234', receiptUrl: 'https://example.com/receipt/ch_1abc', createdAt: '2025-02-25T10:00:00Z' }, { isDefault: true }),
                     resp('Card Declined', 402, { error: { type: 'card_error', code: 'card_declined', message: 'Your card was declined. Try a different payment method.' } }, { conditions: [{ type: 'body', field: 'source', operator: 'equals', value: 'tok_declined' }] })
@@ -329,7 +329,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Create Refund', path: '/refunds', method: 'POST',
-                description: 'Issue a refund for a charge.\n\nExpected JSON Body:\n{\n  "chargeId": "ch_1abc",\n  "amount": 4999,\n  "reason": "requested_by_customer"\n}',
+                description: 'Issue a refund for a charge.\n\nExpected JSON Body:\n{\n  "chargeId": "ch_1abc",\n  "amount": 4999,\n  "reason": "requested_by_customer"\n}', expectedBody: "{\n  \"chargeId\": \"ch_1abc\",\n  \"amount\": 4999,\n  \"reason\": \"requested_by_customer\"\n}",
                 responses: [
                     resp('Refunded', 201, { id: 'rf_1xyz', chargeId: 'ch_1abc', amount: 4999, currency: 'usd', status: 'succeeded', reason: 'requested_by_customer', createdAt: '2025-02-25T11:00:00Z' }, { isDefault: true }),
                     resp('Already Refunded', 400, { error: { type: 'invalid_request_error', message: 'Charge has already been fully refunded' } }, { conditions: [{ type: 'body', field: 'chargeId', operator: 'equals', value: 'ch_refunded' }] })
@@ -373,7 +373,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Create User', path: '/users', method: 'POST',
-                description: 'Invite a new user.\n\nExpected JSON Body:\n{\n  "name": "New User",\n  "email": "newuser@example.com",\n  "role": "viewer"\n}',
+                description: 'Invite a new user.\n\nExpected JSON Body:\n{\n  "name": "New User",\n  "email": "newuser@example.com",\n  "role": "viewer"\n}', expectedBody: "{\n  \"name\": \"New User\",\n  \"email\": \"newuser@example.com\",\n  \"role\": \"viewer\"\n}",
                 responses: [
                     resp('Created', 201, { id: 'us_new', name: 'New User', email: 'newuser@example.com', role: 'viewer', status: 'invited', inviteSentAt: '2025-02-25T10:00:00Z' }, { isDefault: true }),
                     resp('Duplicate Email', 409, { error: 'DUPLICATE_EMAIL', message: 'A user with this email already exists' }, { conditions: [{ type: 'body', field: 'email', operator: 'equals', value: 'john@example.com' }] })
@@ -381,7 +381,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Update User', path: '/users/{id}', method: 'PUT',
-                description: 'Update user details.\n\nExpected JSON Body:\n{\n  "name": "Updated Name",\n  "role": "editor"\n}',
+                description: 'Update user details.\n\nExpected JSON Body:\n{\n  "name": "Updated Name",\n  "role": "editor"\n}', expectedBody: "{\n  \"name\": \"Updated Name\",\n  \"role\": \"editor\"\n}",
                 responses: [
                     resp('Updated', 200, { id: 'us_1', name: 'Updated Name', email: 'john@example.com', role: 'editor', status: 'active', updatedAt: '2025-02-25T10:05:00Z' }, { isDefault: true })
                 ]
@@ -430,7 +430,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Send Message', path: '/conversations/{id}/messages', method: 'POST',
-                description: 'Send a message in a conversation.\n\nExpected JSON Body:\n{\n  "text": "Hello!",\n  "type": "text"\n}',
+                description: 'Send a message in a conversation.\n\nExpected JSON Body:\n{\n  "text": "Hello!",\n  "type": "text"\n}', expectedBody: "{\n  \"text\": \"Hello!\",\n  \"type\": \"text\"\n}",
                 responses: [
                     resp('Sent', 201, { id: 'msg_new', senderId: 'us_current', text: 'Hello!', type: 'text', readBy: ['us_current'], createdAt: '2025-02-25T10:00:00Z' }, { isDefault: true })
                 ]
@@ -535,7 +535,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Update Preferences', path: '/notifications/preferences', method: 'PUT',
-                description: 'Update notification preferences.\n\nExpected JSON Body:\n{\n  "email": { "marketing": true },\n  "push": { "likes": true }\n}',
+                description: 'Update notification preferences.\n\nExpected JSON Body:\n{\n  "email": { "marketing": true },\n  "push": { "likes": true }\n}', expectedBody: "{\n  \"email\": { \"marketing\": true },\n  \"push\": { \"likes\": true }\n}",
                 responses: [
                     resp('Updated', 200, { message: 'Preferences updated successfully' }, { isDefault: true })
                 ]
@@ -566,7 +566,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Upload File', path: '/files/upload', method: 'POST',
-                description: 'Upload a file (multipart/form-data).\n\nExpected form fields:\n- file: <binary>\n- folder: "documents"\n- description: "Optional description"',
+                description: 'Upload a file (multipart/form-data).\n\nExpected form fields:\n- file: <binary>\n- folder: "documents"\n- description: "Optional description"', expectedBody: "- file: <binary>\n- folder: \"documents\"\n- description: \"Optional description\"",
                 responses: [
                     resp('Uploaded', 201, { id: 'f_new', name: 'uploaded-file.pdf', mimeType: 'application/pdf', size: 128000, url: 'https://cdn.example.com/files/uploaded-file.pdf', folder: 'documents', createdAt: '2025-02-25T10:00:00Z' }, { isDefault: true }),
                     resp('Too Large', 413, { error: 'FILE_TOO_LARGE', message: 'File exceeds the maximum size of 10MB' }, { weight: 0 })
@@ -614,7 +614,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Create Booking', path: '/bookings', method: 'POST',
-                description: 'Create a new booking.\n\nExpected JSON Body:\n{\n  "slotId": "slot_1",\n  "serviceId": "svc_1",\n  "date": "2025-03-01",\n  "customerName": "John Doe",\n  "customerEmail": "john@example.com",\n  "notes": "First-time visit"\n}',
+                description: 'Create a new booking.\n\nExpected JSON Body:\n{\n  "slotId": "slot_1",\n  "serviceId": "svc_1",\n  "date": "2025-03-01",\n  "customerName": "John Doe",\n  "customerEmail": "john@example.com",\n  "notes": "First-time visit"\n}', expectedBody: "{\n  \"slotId\": \"slot_1\",\n  \"serviceId\": \"svc_1\",\n  \"date\": \"2025-03-01\",\n  \"customerName\": \"John Doe\",\n  \"customerEmail\": \"john@example.com\",\n  \"notes\": \"First-time visit\"\n}",
                 responses: [
                     resp('Booked', 201, { id: 'bk_abc', slotId: 'slot_1', date: '2025-03-01', startTime: '09:00', endTime: '10:00', status: 'confirmed', confirmationCode: 'CONF-7X8Y', customerName: 'John Doe', createdAt: '2025-02-25T10:00:00Z' }, { isDefault: true }),
                     resp('Slot Taken', 409, { error: 'SLOT_UNAVAILABLE', message: 'This time slot has already been booked' }, { conditions: [{ type: 'body', field: 'slotId', operator: 'equals', value: 'slot_2' }] })
@@ -634,7 +634,7 @@ const TEMPLATES = [
             },
             {
                 name: 'Cancel Booking', path: '/bookings/{id}/cancel', method: 'POST',
-                description: 'Cancel a booking.\n\nExpected JSON Body:\n{\n  "reason": "Schedule conflict"\n}',
+                description: 'Cancel a booking.\n\nExpected JSON Body:\n{\n  "reason": "Schedule conflict"\n}', expectedBody: "{\n  \"reason\": \"Schedule conflict\"\n}",
                 responses: [
                     resp('Cancelled', 200, { id: 'bk_1', status: 'cancelled', reason: 'Schedule conflict', refundAmount: 50.00, cancelledAt: '2025-02-25T12:00:00Z' }, { isDefault: true })
                 ]
@@ -706,9 +706,20 @@ router.post('/:id/apply', async (req, res) => {
         for (const mockData of template.mocks) {
             const mockId = uuidv4();
             await turso.execute(
-                `INSERT INTO mocks (mock_id, project_id, name, path, method, description, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [mockId, targetProjectId, mockData.name, mockData.path, mockData.method, mockData.description || '', now, now]
+                `INSERT INTO mocks (mock_id, project_id, name, path, method, description, expected_body, expected_headers, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    mockId,
+                    targetProjectId,
+                    mockData.name,
+                    mockData.path,
+                    mockData.method,
+                    mockData.description || '',
+                    mockData.expectedBody || '',
+                    mockData.expectedHeaders || '{}',
+                    now,
+                    now
+                ]
             );
 
             for (const respData of mockData.responses) {

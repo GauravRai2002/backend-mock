@@ -56,7 +56,7 @@ router.get('/projects/:projectId/mocks', async (req, res) => {
 router.post('/projects/:projectId/mocks', async (req, res) => {
     try {
         const { projectId } = req.params;
-        const { name, path, method, description, responseType, responseDelay } = req.body;
+        const { name, path, method, description, responseType, responseDelay, expectedBody, expectedHeaders } = req.body;
         const auth = getAuth(req);
         const { scopeWhere, scopeValues } = getScope(auth);
 
@@ -78,12 +78,13 @@ router.post('/projects/:projectId/mocks', async (req, res) => {
         const normalizedPath = path.startsWith('/') ? path : `/${path}`;
 
         await turso.execute(
-            `INSERT INTO mocks (mock_id, project_id, name, path, method, description, response_type, response_delay_ms, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO mocks (mock_id, project_id, name, path, method, description, response_type, response_delay_ms, expected_body, expected_headers, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 mockId, projectId, name, normalizedPath,
                 method.toUpperCase(), description || '',
                 responseType || 'json', responseDelay || 0,
+                expectedBody || '', expectedHeaders || '{}',
                 now, now
             ]
         );
@@ -130,7 +131,7 @@ router.get('/mocks/:id', async (req, res) => {
 router.put('/mocks/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, path, method, description, responseType, responseDelay, isActive } = req.body;
+        const { name, path, method, description, responseType, responseDelay, isActive, expectedBody, expectedHeaders } = req.body;
 
         // Verify ownership through project (org-aware)
         const auth = getAuth(req);
@@ -157,6 +158,8 @@ router.put('/mocks/:id', async (req, res) => {
         response_type = COALESCE(?, response_type),
         response_delay_ms = COALESCE(?, response_delay_ms),
         is_active = COALESCE(?, is_active),
+        expected_body = COALESCE(?, expected_body),
+        expected_headers = COALESCE(?, expected_headers),
         updated_at = ?
        WHERE mock_id = ?`,
             [
@@ -164,6 +167,8 @@ router.put('/mocks/:id', async (req, res) => {
                 description || null, responseType || null,
                 responseDelay !== undefined ? responseDelay : null,
                 isActive !== undefined ? (isActive ? 1 : 0) : null,
+                expectedBody !== undefined ? expectedBody : null,
+                expectedHeaders !== undefined ? expectedHeaders : null,
                 now, id
             ]
         );

@@ -57,6 +57,8 @@ async function globalSetup() {
             is_active INTEGER DEFAULT 1,
             response_type TEXT DEFAULT 'json',
             response_delay_ms INTEGER DEFAULT 0,
+            expected_body TEXT DEFAULT '',
+            expected_headers TEXT DEFAULT '{}',
             created_at TEXT DEFAULT (datetime('now')),
             updated_at TEXT DEFAULT (datetime('now'))
         );
