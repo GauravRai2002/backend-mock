@@ -20,6 +20,7 @@ const authRouter = require("./routes/auth");
 const projectsRouter = require("./routes/projects");
 const mocksRouter = require("./routes/mocks");
 const organizationsRouter = require("./routes/organizations");
+const templatesRouter = require("./routes/templates");
 const authenticate = require("./middleware/auth");
 const { mockExecutionLimiter, apiLimiter } = require("./middleware/rateLimiter");
 
@@ -60,6 +61,7 @@ app.use("/m", mockExecutionLimiter, mockRouter);
  * Rate limited: 200 requests per 15 minutes per IP.
  */
 app.use("/projects", apiLimiter, authenticate, projectsRouter);
+app.use("/templates", apiLimiter, authenticate, templatesRouter);
 app.use("/", apiLimiter, authenticate, mocksRouter);
 app.use("/organizations", apiLimiter, authenticate, organizationsRouter);
 
