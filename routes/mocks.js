@@ -8,17 +8,30 @@ const authenticate = require('../middleware/auth');
 // All routes in this file are protected
 router.use(authenticate);
 
+/**
+ * Scope helper: projects are org-scoped when orgId is present, user-scoped otherwise.
+ * Mirrors the same pattern used in projects.js for consistency.
+ */
+function getScope(auth) {
+    if (auth.orgId) {
+        return { scopeWhere: 'p.org_id = ?', scopeValues: [auth.orgId] };
+    }
+    return { scopeWhere: 'p.user_id = ? AND p.org_id IS NULL', scopeValues: [auth.userId] };
+}
+
 // ─── MOCK CRUD ──────────────────────────────────────────────────────────────
 
 // GET /projects/:projectId/mocks
 router.get('/projects/:projectId/mocks', async (req, res) => {
     try {
         const { projectId } = req.params;
+        const auth = getAuth(req);
+        const { scopeWhere, scopeValues } = getScope(auth);
 
-        // Verify project ownership
+        // Verify project ownership (org-aware)
         const project = await turso.execute(
-            'SELECT project_id FROM projects WHERE project_id = ? AND user_id = ?',
-            [projectId, getAuth(req).userId]
+            `SELECT project_id FROM projects p WHERE p.project_id = ? AND (${scopeWhere})`,
+            [projectId, ...scopeValues]
         );
         if (project.rows.length === 0) {
             return res.status(404).json({ error: 'Project not found' });
@@ -44,15 +57,17 @@ router.post('/projects/:projectId/mocks', async (req, res) => {
     try {
         const { projectId } = req.params;
         const { name, path, method, description, responseType, responseDelay } = req.body;
+        const auth = getAuth(req);
+        const { scopeWhere, scopeValues } = getScope(auth);
 
         if (!name || !path || !method) {
             return res.status(400).json({ error: 'name, path, and method are required' });
         }
 
-        // Verify project ownership
+        // Verify project ownership (org-aware)
         const project = await turso.execute(
-            'SELECT project_id FROM projects WHERE project_id = ? AND user_id = ?',
-            [projectId, getAuth(req).userId]
+            `SELECT project_id FROM projects p WHERE p.project_id = ? AND (${scopeWhere})`,
+            [projectId, ...scopeValues]
         );
         if (project.rows.length === 0) {
             return res.status(404).json({ error: 'Project not found' });
@@ -85,12 +100,14 @@ router.post('/projects/:projectId/mocks', async (req, res) => {
 router.get('/mocks/:id', async (req, res) => {
     try {
         const { id } = req.params;
+        const auth = getAuth(req);
+        const { scopeWhere, scopeValues } = getScope(auth);
 
         const mockResult = await turso.execute(
             `SELECT m.* FROM mocks m
        INNER JOIN projects p ON m.project_id = p.project_id
-       WHERE m.mock_id = ? AND p.user_id = ?`,
-            [id, getAuth(req).userId]
+       WHERE m.mock_id = ? AND (${scopeWhere})`,
+            [id, ...scopeValues]
         );
         const mock = mockResult.rows[0];
         if (!mock) {
@@ -115,12 +132,14 @@ router.put('/mocks/:id', async (req, res) => {
         const { id } = req.params;
         const { name, path, method, description, responseType, responseDelay, isActive } = req.body;
 
-        // Verify ownership through project
+        // Verify ownership through project (org-aware)
+        const auth = getAuth(req);
+        const { scopeWhere, scopeValues } = getScope(auth);
         const existing = await turso.execute(
             `SELECT m.mock_id FROM mocks m
        INNER JOIN projects p ON m.project_id = p.project_id
-       WHERE m.mock_id = ? AND p.user_id = ?`,
-            [id, getAuth(req).userId]
+       WHERE m.mock_id = ? AND (${scopeWhere})`,
+            [id, ...scopeValues]
         );
         if (existing.rows.length === 0) {
             return res.status(404).json({ error: 'Mock not found' });
@@ -161,11 +180,13 @@ router.put('/mocks/:id', async (req, res) => {
 router.delete('/mocks/:id', async (req, res) => {
     try {
         const { id } = req.params;
+        const auth = getAuth(req);
+        const { scopeWhere, scopeValues } = getScope(auth);
         const existing = await turso.execute(
             `SELECT m.mock_id FROM mocks m
        INNER JOIN projects p ON m.project_id = p.project_id
-       WHERE m.mock_id = ? AND p.user_id = ?`,
-            [id, getAuth(req).userId]
+       WHERE m.mock_id = ? AND (${scopeWhere})`,
+            [id, ...scopeValues]
         );
         if (existing.rows.length === 0) {
             return res.status(404).json({ error: 'Mock not found' });
@@ -200,14 +221,16 @@ router.get('/mocks/:id/responses', async (req, res) => {
 router.post('/mocks/:id/responses', async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, statusCode, headers, body, isDefault, weight } = req.body;
+        const { name, statusCode, headers, body, isDefault, weight, conditions } = req.body;
+        const auth = getAuth(req);
+        const { scopeWhere, scopeValues } = getScope(auth);
 
-        // Verify mock exists and belongs to user
+        // Verify mock exists and belongs to user/org
         const mockCheck = await turso.execute(
             `SELECT m.mock_id FROM mocks m
        INNER JOIN projects p ON m.project_id = p.project_id
-       WHERE m.mock_id = ? AND p.user_id = ?`,
-            [id, getAuth(req).userId]
+       WHERE m.mock_id = ? AND (${scopeWhere})`,
+            [id, ...scopeValues]
         );
         if (mockCheck.rows.length === 0) {
             return res.status(404).json({ error: 'Mock not found' });
@@ -223,10 +246,11 @@ router.post('/mocks/:id/responses', async (req, res) => {
 
         const responseId = uuidv4();
         const now = new Date().toISOString();
+        const conditionsStr = conditions ? (typeof conditions === 'string' ? conditions : JSON.stringify(conditions)) : '[]';
 
         await turso.execute(
-            `INSERT INTO mock_responses (response_id, mock_id, name, status_code, headers, body, is_default, weight, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO mock_responses (response_id, mock_id, name, status_code, headers, body, is_default, weight, conditions, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 responseId, id, name || 'Response',
                 statusCode || 200,
@@ -234,6 +258,7 @@ router.post('/mocks/:id/responses', async (req, res) => {
                 body || '',
                 isDefault ? 1 : 0,
                 weight || 100,
+                conditionsStr,
                 now
             ]
         );
@@ -253,7 +278,7 @@ router.post('/mocks/:id/responses', async (req, res) => {
 router.put('/mocks/:id/responses/:responseId', async (req, res) => {
     try {
         const { id, responseId } = req.params;
-        const { name, statusCode, headers, body, isDefault, weight } = req.body;
+        const { name, statusCode, headers, body, isDefault, weight, conditions } = req.body;
 
         // If setting new default, unset others
         if (isDefault) {
@@ -263,6 +288,10 @@ router.put('/mocks/:id/responses/:responseId', async (req, res) => {
             );
         }
 
+        const conditionsStr = conditions !== undefined
+            ? (typeof conditions === 'string' ? conditions : JSON.stringify(conditions))
+            : null;
+
         await turso.execute(
             `UPDATE mock_responses SET
         name = COALESCE(?, name),
@@ -270,7 +299,8 @@ router.put('/mocks/:id/responses/:responseId', async (req, res) => {
         headers = COALESCE(?, headers),
         body = COALESCE(?, body),
         is_default = COALESCE(?, is_default),
-        weight = COALESCE(?, weight)
+        weight = COALESCE(?, weight),
+        conditions = COALESCE(?, conditions)
        WHERE response_id = ? AND mock_id = ?`,
             [
                 name || null,
@@ -279,6 +309,7 @@ router.put('/mocks/:id/responses/:responseId', async (req, res) => {
                 body !== undefined ? body : null,
                 isDefault !== undefined ? (isDefault ? 1 : 0) : null,
                 weight !== undefined ? weight : null,
+                conditionsStr,
                 responseId, id
             ]
         );
@@ -357,11 +388,13 @@ router.post('/mocks/:id/duplicate', async (req, res) => {
     try {
         const { id } = req.params;
 
+        const auth = getAuth(req);
+        const { scopeWhere, scopeValues } = getScope(auth);
         const mockResult = await turso.execute(
             `SELECT m.* FROM mocks m
              INNER JOIN projects p ON m.project_id = p.project_id
-             WHERE m.mock_id = ? AND p.user_id = ?`,
-            [id, getAuth(req).userId]
+             WHERE m.mock_id = ? AND (${scopeWhere})`,
+            [id, ...scopeValues]
         );
         const original = mockResult.rows[0];
         if (!original) return res.status(404).json({ error: 'Mock not found' });

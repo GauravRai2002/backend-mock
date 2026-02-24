@@ -106,7 +106,44 @@ The session token automatically includes `orgId`. MockBird scopes all project da
 ## 2. Organizations
 
 All endpoints require `Authorization: Bearer <clerk_session_token>`.  
-User must be a **member of the org** (their active session must have `orgId` matching the requested org).
+User must be a **member of the org** (their active session must have `orgId` matching the requested org).  
+Write operations (invite, role change, remove) require **admin** or **owner** role.
+
+---
+
+### `POST /organizations`
+Create a new organization. The calling user becomes the owner.
+
+**Request**
+```json
+{
+  "name": "Acme Corp",
+  "slug": "acme-corp"
+}
+```
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `name` | string | ✅ | |
+| `slug` | string | ❌ | Auto-generated from name if omitted |
+
+**Response `201 Created`**
+```json
+{
+  "orgId": "org_xyz789",
+  "name": "Acme Corp",
+  "slug": "acme-corp",
+  "imageUrl": null,
+  "membersCount": 1,
+  "createdAt": "2026-02-20T10:00:00.000Z"
+}
+```
+
+**Errors**
+| Status | Reason |
+|--------|--------|
+| `400` | `name` is missing |
+| `409` | Slug already exists |
 
 ---
 
@@ -164,6 +201,98 @@ Get paginated list of org members.
   "offset": 0
 }
 ```
+
+---
+
+### `POST /organizations/:id/invitations`
+Invite a user to the organization by email. Requires **admin/owner** role.
+
+**Request**
+```json
+{
+  "emailAddress": "member@example.com",
+  "role": "org:member"
+}
+```
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `emailAddress` | string | ✅ | |
+| `role` | string | ❌ | `"org:member"` (default) or `"org:admin"` |
+
+**Response `201 Created`**
+```json
+{
+  "id": "inv_abc123",
+  "emailAddress": "member@example.com",
+  "role": "org:member",
+  "status": "pending",
+  "createdAt": "2026-02-20T12:00:00.000Z"
+}
+```
+
+**Errors**
+| Status | Reason |
+|--------|--------|
+| `400` | `emailAddress` missing |
+| `403` | Caller is not admin/owner |
+| `409` | User is already a member |
+
+---
+
+### `PUT /organizations/:id/members/:membershipId`
+Change a member's role. Requires **admin/owner** role.
+
+**Request**
+```json
+{
+  "role": "org:admin"
+}
+```
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `role` | string | ✅ | `"org:member"` or `"org:admin"` |
+
+**Response `200 OK`**
+```json
+{
+  "membershipId": "mem_xxx",
+  "role": "org:admin",
+  "user": {
+    "userId": "user_2abc123",
+    "firstName": "John",
+    "lastName": "Doe",
+    "email": "john@example.com",
+    "imageUrl": "https://..."
+  }
+}
+```
+
+**Errors**
+| Status | Reason |
+|--------|--------|
+| `400` | `role` missing |
+| `403` | Caller is not admin/owner |
+| `404` | Membership not found |
+
+---
+
+### `DELETE /organizations/:id/members/:membershipId`
+Remove a member from the organization. Requires **admin/owner** role.
+
+**Response `200 OK`**
+```json
+{
+  "message": "Member removed successfully"
+}
+```
+
+**Errors**
+| Status | Reason |
+|--------|--------|
+| `403` | Caller is not admin/owner |
+| `404` | Membership not found |
 
 ---
 
@@ -335,7 +464,9 @@ The clone gets name `Original Name (Copy)`.
 ## 5. Mock Responses
 
 All endpoints require `Authorization: Bearer <clerk_session_token>`.  
-A mock can have multiple responses. The one where `is_default = 1` is returned when the endpoint is hit.
+A mock can have multiple responses. The execution engine picks responses using **conditions** first, then **weighted random** selection within the matching pool.
+
+> **Condition evaluation**: Responses with conditions are evaluated first. If any response's conditions ALL match, those responses form the selection pool. If no conditional response matches, unconditioned responses are used as fallback. Within either pool, weighted random selection applies.
 
 ---
 
@@ -354,6 +485,7 @@ A mock can have multiple responses. The one where `is_default = 1` is returned w
       "body": "{\"users\": []}",
       "is_default": 1,
       "weight": 100,
+      "conditions": "[]",
       "created_at": "..."
     }
   ]
@@ -376,7 +508,15 @@ A mock can have multiple responses. The one where `is_default = 1` is returned w
   },
   "body": "{\"users\": [{\"id\": 1}]}",
   "isDefault": true,
-  "weight": 100
+  "weight": 100,
+  "conditions": [
+    {
+      "type": "header",
+      "field": "x-role",
+      "operator": "equals",
+      "value": "admin"
+    }
+  ]
 }
 ```
 
@@ -387,7 +527,26 @@ A mock can have multiple responses. The one where `is_default = 1` is returned w
 | `headers` | object | ❌ | Key-value pairs |
 | `body` | string | ❌ | **Must be a string** — serialize JSON first |
 | `isDefault` | boolean | ❌ | Setting `true` auto-unsets the previous default |
-| `weight` | number | ❌ | Defaults to `100` (reserved for future use) |
+| `weight` | number | ❌ | Defaults to `100`. Higher weight = higher chance of selection |
+| `conditions` | array | ❌ | Array of condition objects (see below). Defaults to `[]` |
+
+#### Condition Object
+
+```json
+{
+  "type": "header",
+  "field": "x-role",
+  "operator": "equals",
+  "value": "admin"
+}
+```
+
+| Field | Type | Values |
+|-------|------|--------|
+| `type` | string | `"header"`, `"query"`, `"body"`, `"path"` |
+| `field` | string | The field name to check (e.g. header name, query param, body key, path param) |
+| `operator` | string | `"equals"`, `"contains"`, `"regex"` |
+| `value` | string | The value to match against |
 
 **Response `201 Created`** — returns created response object
 
@@ -469,8 +628,12 @@ DELETE http://localhost:3001/m/my-api/users/123
 **Behaviour:**
 - Looks up project by `slug`
 - Finds best matching mock (exact path → then pattern match with `{param}`)
+- **Evaluates response conditions** against the incoming request:
+  1. Conditional responses whose conditions ALL match → weighted-random among them
+  2. If no conditional response matches → unconditioned responses → weighted-random
+  3. If all weights are 0 → falls back to `is_default` or first response
 - Applies `response_delay_ms` before responding
-- Sets custom headers and status code from the default response
+- Sets custom headers and status code from the selected response
 - Logs every request automatically
 
 **CORS headers are always set:**
@@ -498,8 +661,12 @@ OPTIONS preflight → `204 No Content`
 |--------|------|------|-------------|
 | `GET` | `/auth/me` | ✅ | Sync Clerk user + get profile (call after login) |
 | `PATCH` | `/auth/profile` | ✅ | Update display name |
+| `POST` | `/organizations` | ✅ | Create organization |
 | `GET` | `/organizations/:id` | ✅ | Get org name, slug, member count |
 | `GET` | `/organizations/:id/members` | ✅ | List org members with roles |
+| `POST` | `/organizations/:id/invitations` | ✅ 🔒 | Invite member by email |
+| `PUT` | `/organizations/:id/members/:mid` | ✅ 🔒 | Change member role |
+| `DELETE` | `/organizations/:id/members/:mid` | ✅ 🔒 | Remove member |
 | `GET` | `/projects?search=` | ✅ | List projects (supports search) |
 | `POST` | `/projects` | ✅ | Create project |
 | `GET` | `/projects/:id` | ✅ | Get project + mocks |
@@ -514,11 +681,12 @@ OPTIONS preflight → `204 No Content`
 | `DELETE` | `/mocks/:id` | ✅ | Delete mock |
 | `POST` | `/mocks/:id/duplicate` | ✅ | Clone mock |
 | `GET` | `/mocks/:id/responses` | ✅ | List responses |
-| `POST` | `/mocks/:id/responses` | ✅ | Add response |
-| `PUT` | `/mocks/:id/responses/:rid` | ✅ | Update response |
+| `POST` | `/mocks/:id/responses` | ✅ | Add response (supports conditions) |
+| `PUT` | `/mocks/:id/responses/:rid` | ✅ | Update response (supports conditions) |
 | `DELETE` | `/mocks/:id/responses/:rid` | ✅ | Delete response |
 | `GET` | `/mocks/:id/request-logs` | ✅ | View request history |
-| `ANY` | `/m/:slug/*path` | ❌ | **Execute mock** (public endpoint) |
+| `ANY` | `/m/:slug/*path` | ❌ | **Execute mock** (public, evaluates conditions) |
 
 > ✅ = requires `Authorization: Bearer <clerk_session_token>`  
+> ✅ 🔒 = requires admin/owner role in the organization  
 > ❌ = no auth required

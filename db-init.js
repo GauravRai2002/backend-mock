@@ -105,6 +105,14 @@ async function init() {
     // Column doesn't exist or already dropped — ignore
   }
 
+  // Add conditions to mock_responses (response conditions logic)
+  try {
+    await turso.execute("ALTER TABLE mock_responses ADD COLUMN conditions TEXT DEFAULT '[]'");
+    console.log('🔄 Migration: added conditions column to mock_responses');
+  } catch (e) {
+    // Column already exists — ignore
+  }
+
   process.exit(0);
 }
 

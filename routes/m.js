@@ -2,30 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const turso = require('../db');
-
-/**
- * Path pattern matching — converts /users/{id}/posts/{postId} to a regex
- * and extracts named parameters from the actual request path.
- */
-function matchPath(pattern, actualPath) {
-    const paramNames = [];
-    // Replace {paramName} with a capture group
-    const regexStr = pattern.replace(/{([^}]+)}/g, (_, name) => {
-        paramNames.push(name);
-        return '([^/]+)';
-    });
-    // Escape dots and other regex-special chars in the static parts
-    const escaped = regexStr.replace(/\./g, '\\.');
-    const regex = new RegExp(`^${escaped}$`);
-    const match = actualPath.match(regex);
-    if (!match) return { isMatch: false, params: {} };
-
-    const params = {};
-    paramNames.forEach((name, i) => {
-        params[name] = match[i + 1];
-    });
-    return { isMatch: true, params };
-}
+const { matchPath, evaluateCondition, responseMatchesConditions, pickResponse } = require('../utils/execution');
 
 /**
  * Find the best matching mock for a given project, path, and method.
@@ -60,40 +37,6 @@ async function findMatchingMock(projectId, requestPath, method) {
 
     return null;
 }
-
-/**
- * Pick the response to return using weighted random selection.
- *
- * How it works:
- * - Each response has a `weight` (default 100).
- * - A random number is rolled against the total weight pool.
- * - Responses with higher weight are proportionally more likely to be selected.
- * - If only one response exists, it is always returned.
- * - If all weights are 0, falls back to the is_default response (or first).
- *
- * Example: weights [70, 20, 10] → 70%, 20%, 10% chance respectively.
- */
-function pickResponse(responses) {
-    if (!responses || responses.length === 0) return null;
-    if (responses.length === 1) return responses[0];
-
-    const totalWeight = responses.reduce((sum, r) => sum + (r.weight || 0), 0);
-
-    // If all weights are 0, fall back to default or first
-    if (totalWeight === 0) {
-        return responses.find((r) => r.is_default === 1) || responses[0];
-    }
-
-    let roll = Math.random() * totalWeight;
-    for (const resp of responses) {
-        roll -= (resp.weight || 0);
-        if (roll <= 0) return resp;
-    }
-
-    // Fallback (floating point edge case)
-    return responses[responses.length - 1];
-}
-
 
 /**
  * Log the request asynchronously (don't block the response).
@@ -181,7 +124,7 @@ router.all('/:projectSlug/{*path}', async (req, res) => {
             });
         }
 
-        const { mock } = match;
+        const { mock, pathParams } = match;
 
         // 3. Fetch responses for this mock
         const responsesResult = await turso.execute(
@@ -189,7 +132,7 @@ router.all('/:projectSlug/{*path}', async (req, res) => {
             [mock.mock_id]
         );
 
-        const response = pickResponse(responsesResult.rows);
+        const response = pickResponse(responsesResult.rows, req, pathParams);
         if (!response) {
             return res.status(404).json({
                 error: 'NO_RESPONSE_DEFINED',

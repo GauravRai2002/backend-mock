@@ -1,14 +1,27 @@
-const dotenv = require("dotenv");
+'use strict';
+
+const dotenv = require('dotenv');
 dotenv.config();
-const { createClient } = require("@libsql/client");
+
+const { createClient } = require('@libsql/client');
+const path = require('path');
 
 /**
- * Turso database client configuration
- * Creates and exports a configured database client for LibSQL/Turso
+ * db.js — shared database client.
+ *
+ * In test environments (NODE_ENV=test), we connect to a local `test.db` file
+ * so that every require() of this module gets the same underlying database.
+ * (:memory: would create isolated, empty databases per require() invocation.)
  */
-const turso = createClient({
-  url: process.env.TURSO_DATABASE_URL,
-  authToken: process.env.TURSO_AUTH_TOKEN,
-});
+const isTest = process.env.NODE_ENV === 'test';
 
-module.exports = turso; 
+const turso = createClient(
+  isTest
+    ? { url: `file:${path.join(__dirname, 'test.db')}` }
+    : {
+      url: process.env.TURSO_DATABASE_URL,
+      authToken: process.env.TURSO_AUTH_TOKEN,
+    }
+);
+
+module.exports = turso;

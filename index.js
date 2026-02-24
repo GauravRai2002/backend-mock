@@ -8,8 +8,6 @@ const app = express();
 
 // Route imports
 const usersRouter = require("./routes/users");
-const organizationRouter = require("./routes/organization");
-const membersRouter = require("./routes/members");
 const mockRouter = require("./routes/m");
 const authRouter = require("./routes/auth");
 const projectsRouter = require("./routes/projects");
@@ -58,8 +56,6 @@ app.use("/organizations", authenticate, organizationsRouter);
 
 // Legacy routes
 app.use("/users", authenticate, usersRouter);
-app.use("/organization", authenticate, organizationRouter);
-app.use("/members", authenticate, membersRouter);
 
 /**
  * Start server
