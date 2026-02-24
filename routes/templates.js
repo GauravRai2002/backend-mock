@@ -39,28 +39,28 @@ const TEMPLATES = [
             {
                 name: 'List Products', path: '/products', method: 'GET', description: 'Returns a list of all products in the catalog',
                 responses: [
-                    { name: 'Success', statusCode: 200, isDefault: true, body: JSON.stringify([{ id: 1, name: 'Wireless Headphones', price: 99.99, stock: 45 }, { id: 2, name: 'Mechanical Keyboard', price: 129.99, stock: 12 }]) }
+                    { name: 'Success', statusCode: 200, isDefault: true, body: JSON.stringify([{ id: 1, name: 'Wireless Headphones', price: 99.99, stock: 45 }, { id: 2, name: 'Mechanical Keyboard', price: 129.99, stock: 12 }], null, 2) }
                 ]
             },
             {
                 name: 'Get Product Details', path: '/products/{id}', method: 'GET', description: 'Get details for a single product',
                 responses: [
-                    { name: 'Found', statusCode: 200, isDefault: true, body: JSON.stringify({ id: 1, name: 'Wireless Headphones', price: 99.99, stock: 45, specs: ['Bluetooth 5.0', 'ANC'] }) },
-                    { name: 'Not Found', statusCode: 404, conditions: [{ type: 'path', field: 'id', operator: 'equals', value: '999' }], body: JSON.stringify({ error: 'Product not found' }) }
+                    { name: 'Found', statusCode: 200, isDefault: true, body: JSON.stringify({ id: 1, name: 'Wireless Headphones', price: 99.99, stock: 45, specs: ['Bluetooth 5.0', 'ANC'] }, null, 2) },
+                    { name: 'Not Found', statusCode: 404, conditions: [{ type: 'path', field: 'id', operator: 'equals', value: '999' }], body: JSON.stringify({ error: 'Product not found' }, null, 2) }
                 ]
             },
             {
-                name: 'Add to Cart', path: '/cart', method: 'POST', description: 'Add a product to the shopping cart',
+                name: 'Add to Cart', path: '/cart', method: 'POST', description: 'Add a product to the shopping cart.\n\nExpected JSON Body:\n{\n  "productId": 1,\n  "quantity": 2\n}',
                 responses: [
-                    { name: 'Added', statusCode: 201, isDefault: true, body: JSON.stringify({ message: 'Added to cart', cartTotal: 99.99 }) },
-                    { name: 'Out of Stock', statusCode: 400, conditions: [{ type: 'body', field: 'quantity', operator: 'regex', value: '^[1-9][0-9]{2,}$' }], body: JSON.stringify({ error: 'Requested quantity exceeds available stock' }) }
+                    { name: 'Added', statusCode: 201, isDefault: true, body: JSON.stringify({ message: 'Added to cart', cartTotal: 99.99 }, null, 2) },
+                    { name: 'Out of Stock', statusCode: 400, conditions: [{ type: 'body', field: 'quantity', operator: 'regex', value: '^[1-9][0-9]{2,}$' }], body: JSON.stringify({ error: 'Requested quantity exceeds available stock' }, null, 2) }
                 ]
             },
             {
-                name: 'Checkout', path: '/checkout', method: 'POST', description: 'Process payment and complete order',
+                name: 'Checkout', path: '/checkout', method: 'POST', description: 'Process payment and complete order.\n\nExpected Headers:\nAuthorization: Bearer <token>',
                 responses: [
-                    { name: 'Success', statusCode: 200, isDefault: true, body: JSON.stringify({ orderId: 'ORD-8X9Y2Z', status: 'Payment successful', estimatedDelivery: '3-5 business days' }) },
-                    { name: 'Payment Failed', statusCode: 402, conditions: [{ type: 'header', field: 'authorization', operator: 'equals', value: 'Bearer declinethis' }], body: JSON.stringify({ error: 'Card declined by issuing bank' }) }
+                    { name: 'Success', statusCode: 200, isDefault: true, body: JSON.stringify({ orderId: 'ORD-8X9Y2Z', status: 'Payment successful', estimatedDelivery: '3-5 business days' }, null, 2) },
+                    { name: 'Payment Failed', statusCode: 402, conditions: [{ type: 'header', field: 'authorization', operator: 'equals', value: 'Bearer declinethis' }], body: JSON.stringify({ error: 'Card declined by issuing bank' }, null, 2) }
                 ]
             }
         ]
@@ -71,24 +71,24 @@ const TEMPLATES = [
         description: 'Registration, login, and token refresh endpoints',
         mocks: [
             {
-                name: 'Register', path: '/auth/register', method: 'POST', description: 'Create a new user account',
+                name: 'Register', path: '/auth/register', method: 'POST', description: 'Create a new user account.\n\nExpected JSON Body:\n{\n  "email": "test@example.com",\n  "password": "securepassword123"\n}',
                 responses: [
-                    { name: 'Created', statusCode: 201, isDefault: true, body: JSON.stringify({ userId: 'us_123', email: 'test@example.com', token: 'jwt_mock_token_abc123' }) },
-                    { name: 'Email Taken', statusCode: 409, conditions: [{ type: 'body', field: 'email', operator: 'equals', value: 'admin@example.com' }], body: JSON.stringify({ error: 'Email already in use' }) }
+                    { name: 'Created', statusCode: 201, isDefault: true, body: JSON.stringify({ userId: 'us_123', email: 'test@example.com', token: 'jwt_mock_token_abc123' }, null, 2) },
+                    { name: 'Email Taken', statusCode: 409, conditions: [{ type: 'body', field: 'email', operator: 'equals', value: 'admin@example.com' }], body: JSON.stringify({ error: 'Email already in use' }, null, 2) }
                 ]
             },
             {
-                name: 'Login', path: '/auth/login', method: 'POST', description: 'Authenticate user and return token',
+                name: 'Login', path: '/auth/login', method: 'POST', description: 'Authenticate user and return token.\n\nExpected JSON Body:\n{\n  "email": "test@example.com",\n  "password": "securepassword123"\n}',
                 responses: [
-                    { name: 'Success', statusCode: 200, isDefault: true, body: JSON.stringify({ token: 'jwt_mock_token_abc123', user: { id: 'us_123', role: 'user' } }) },
-                    { name: 'Invalid Credentials', statusCode: 401, conditions: [{ type: 'body', field: 'password', operator: 'equals', value: 'wrongpassword' }], body: JSON.stringify({ error: 'Invalid email or password' }) }
+                    { name: 'Success', statusCode: 200, isDefault: true, body: JSON.stringify({ token: 'jwt_mock_token_abc123', user: { id: 'us_123', role: 'user' } }, null, 2) },
+                    { name: 'Invalid Credentials', statusCode: 401, conditions: [{ type: 'body', field: 'password', operator: 'equals', value: 'wrongpassword' }], body: JSON.stringify({ error: 'Invalid email or password' }, null, 2) }
                 ]
             },
             {
-                name: 'Get Current User', path: '/auth/me', method: 'GET', description: 'Get profile of logged in user',
+                name: 'Get Current User', path: '/auth/me', method: 'GET', description: 'Get profile of logged in user.\n\nExpected Headers:\nAuthorization: Bearer <token>',
                 responses: [
-                    { name: 'Success', statusCode: 200, isDefault: true, body: JSON.stringify({ id: 'us_123', email: 'test@example.com', role: 'user', verified: true }) },
-                    { name: 'Unauthorized', statusCode: 401, conditions: [{ type: 'header', field: 'authorization', operator: 'equals', value: 'Bearer expired_token' }], body: JSON.stringify({ error: 'Token expired or invalid' }) }
+                    { name: 'Success', statusCode: 200, isDefault: true, body: JSON.stringify({ id: 'us_123', email: 'test@example.com', role: 'user', verified: true }, null, 2) },
+                    { name: 'Unauthorized', statusCode: 401, conditions: [{ type: 'header', field: 'authorization', operator: 'equals', value: 'Bearer expired_token' }], body: JSON.stringify({ error: 'Token expired or invalid' }, null, 2) }
                 ]
             }
         ]
@@ -101,25 +101,25 @@ const TEMPLATES = [
             {
                 name: 'List Tasks', path: '/todos', method: 'GET', description: 'Get all tasks',
                 responses: [
-                    { name: 'Success', statusCode: 200, isDefault: true, body: JSON.stringify([{ id: 1, title: 'Buy groceries', completed: false }, { id: 2, title: 'Finish MockBird Launch', completed: true }]) }
+                    { name: 'Success', statusCode: 200, isDefault: true, body: JSON.stringify([{ id: 1, title: 'Buy groceries', completed: false }, { id: 2, title: 'Finish MockBird Launch', completed: true }], null, 2) }
                 ]
             },
             {
-                name: 'Create Task', path: '/todos', method: 'POST', description: 'Create a new task',
+                name: 'Create Task', path: '/todos', method: 'POST', description: 'Create a new task.\n\nExpected JSON Body:\n{\n  "title": "New Task",\n  "completed": false\n}',
                 responses: [
-                    { name: 'Created', statusCode: 201, isDefault: true, body: JSON.stringify({ id: 3, title: 'New Task', completed: false }) }
+                    { name: 'Created', statusCode: 201, isDefault: true, body: JSON.stringify({ id: 3, title: 'New Task', completed: false }, null, 2) }
                 ]
             },
             {
-                name: 'Update Task', path: '/todos/{id}', method: 'PUT', description: 'Update an existing task',
+                name: 'Update Task', path: '/todos/{id}', method: 'PUT', description: 'Update an existing task.\n\nExpected JSON Body:\n{\n  "title": "Updated Task",\n  "completed": true\n}',
                 responses: [
-                    { name: 'Updated', statusCode: 200, isDefault: true, body: JSON.stringify({ id: 3, title: 'Updated Task', completed: true }) }
+                    { name: 'Updated', statusCode: 200, isDefault: true, body: JSON.stringify({ id: 3, title: 'Updated Task', completed: true }, null, 2) }
                 ]
             },
             {
                 name: 'Delete Task', path: '/todos/{id}', method: 'DELETE', description: 'Delete a task',
                 responses: [
-                    { name: 'Deleted', statusCode: 200, isDefault: true, body: JSON.stringify({ message: 'Task deleted successfully' }) }
+                    { name: 'Deleted', statusCode: 200, isDefault: true, body: JSON.stringify({ message: 'Task deleted successfully' }, null, 2) }
                 ]
             }
         ]
