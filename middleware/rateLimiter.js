@@ -8,11 +8,11 @@ const rateLimit = require('express-rate-limit');
  * Two limiters are exported:
  *
  * 1. mockExecutionLimiter — for the PUBLIC /m/:slug/* endpoint.
- *    Per-IP: 100 requests per 15-minute window (generous for testing,
+ *    Per-IP: 500 requests per 15-minute window (generous for testing,
  *    strict enough to protect against abuse).
  *
  * 2. apiLimiter — for the authenticated management API.
- *    Per-IP: 200 requests per 15-minute window (higher because these
+ *    Per-IP: 500 requests per 15-minute window (higher because these
  *    are legitimate dashboard actions).
  *
  * When a client hits the limit, they receive a 429 response with a
@@ -21,7 +21,7 @@ const rateLimit = require('express-rate-limit');
 
 const mockExecutionLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100,                  // 100 requests per window per IP
+    max: 500,                  // 500 requests per window per IP
     standardHeaders: true,     // Return rate limit info in RateLimit-* headers
     legacyHeaders: false,      // Disable X-RateLimit-* headers
     keyGenerator: (req) => {
@@ -39,7 +39,7 @@ const mockExecutionLimiter = rateLimit({
 
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 200,                  // 200 requests per window per IP
+    max: 500,                  // 500 requests per window per IP
     standardHeaders: true,
     legacyHeaders: false,
     handler: (_req, res) => {

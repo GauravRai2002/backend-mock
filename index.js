@@ -6,6 +6,13 @@ const express = require("express");
 const { clerkMiddleware } = require("@clerk/express");
 const app = express();
 
+/**
+ * Trust the reverse proxy (Vercel, Render, Heroku, etc.)
+ * This ensures req.ip represents the actual client IP, not the proxy's IP.
+ * CRITICAL for rate limiting, otherwise all users share the same IP limit!
+ */
+app.set('trust proxy', 1);
+
 // Route imports
 const usersRouter = require("./routes/users");
 const mockRouter = require("./routes/m");
