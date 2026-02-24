@@ -41,7 +41,7 @@ async function findMatchingMock(projectId, requestPath, method) {
 /**
  * Log the request asynchronously (don't block the response).
  */
-async function logRequest({ mockId, projectId, req, responseStatus, responseTimeMs }) {
+async function logRequest({ mockId, projectId, req, responseStatus, responseTimeMs, responseHeaders = null, responseBody = null }) {
     try {
         // Sanitize headers to prevent logging sensitive tokens
         const sanitizedHeaders = { ...req.headers };
@@ -52,8 +52,8 @@ async function logRequest({ mockId, projectId, req, responseStatus, responseTime
 
         await turso.execute(
             `INSERT INTO request_logs 
-        (log_id, mock_id, project_id, request_path, request_method, request_headers, request_body, request_query, response_status, response_time_ms, ip_address, user_agent, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (log_id, mock_id, project_id, request_path, request_method, request_headers, request_body, request_query, response_status, response_time_ms, response_headers, response_body, ip_address, user_agent, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 uuidv4(),
                 mockId || null,
@@ -65,6 +65,8 @@ async function logRequest({ mockId, projectId, req, responseStatus, responseTime
                 JSON.stringify(req.query),
                 responseStatus,
                 responseTimeMs,
+                responseHeaders ? (typeof responseHeaders === 'object' ? JSON.stringify(responseHeaders) : responseHeaders) : '{}',
+                responseBody ? (typeof responseBody === 'object' ? JSON.stringify(responseBody) : responseBody) : '',
                 req.ip || req.connection?.remoteAddress || '',
                 req.get('user-agent') || '',
                 new Date().toISOString()
@@ -184,7 +186,9 @@ router.all('/:projectSlug/{*path}', async (req, res) => {
             projectId: project.project_id,
             req,
             responseStatus: response.status_code,
-            responseTimeMs: elapsed
+            responseTimeMs: elapsed,
+            responseHeaders: headers,
+            responseBody: response.body || ''
         });
 
         // 7. Send response

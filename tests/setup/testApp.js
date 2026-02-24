@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS request_logs (
     log_id TEXT PRIMARY KEY, mock_id TEXT, project_id TEXT,
     request_path TEXT, request_method TEXT, request_headers TEXT,
     request_body TEXT, request_query TEXT, response_status INTEGER,
-    response_time_ms INTEGER, ip_address TEXT, user_agent TEXT,
+    response_time_ms INTEGER, response_headers TEXT, response_body TEXT,
+    ip_address TEXT, user_agent TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
 `;

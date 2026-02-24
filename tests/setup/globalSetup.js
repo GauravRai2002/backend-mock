@@ -87,6 +87,8 @@ async function globalSetup() {
             request_query TEXT,
             response_status INTEGER,
             response_time_ms INTEGER,
+            response_headers TEXT,
+            response_body TEXT,
             ip_address TEXT,
             user_agent TEXT,
             created_at TEXT DEFAULT (datetime('now'))
