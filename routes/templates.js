@@ -11,6 +11,24 @@ function getScope(auth) {
     return { scopeWhere: 'user_id = ? AND org_id IS NULL', scopeValues: [auth.userId] };
 }
 
+// Helper: generate URL-safe slug from name
+function generateSlug(name) {
+    return name
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .trim()
+        .replace(/\s+/g, '-')
+        .substring(0, 50);
+}
+
+// Ensure slug is unique
+async function uniqueSlug(base) {
+    const existing = await turso.execute('SELECT slug FROM projects WHERE slug = ?', [base]);
+    if (existing.rows.length === 0) return base;
+    const suffix = uuidv4().substring(0, 6);
+    return `${base}-${suffix}`;
+}
+
 // Predefined API Templates
 const TEMPLATES = [
     {
@@ -120,32 +138,67 @@ router.get('/', (req, res) => {
     res.status(200).json({ data: list });
 });
 
+// GET /templates/:id
+// Returns full template details including mocks and responses for preview/overview
+router.get('/:id', (req, res) => {
+    const { id } = req.params;
+    const template = TEMPLATES.find(t => t.id === id);
+    if (!template) return res.status(404).json({ error: 'Template not found' });
+
+    res.status(200).json({ data: template });
+});
+
 // POST /templates/:id/apply
-// Applies a template to a specific project.
-// Body: { projectId: "uuid" }
+// Applies a template. Can either apply to an existing project (provide projectId)
+// or create a new project (provide projectName).
+// Body: { projectId?: "uuid", projectName?: "string" }
 router.post('/:id/apply', async (req, res) => {
     try {
         const { id } = req.params;
-        const { projectId } = req.body;
+        const { projectId, projectName } = req.body;
 
-        if (!projectId) return res.status(400).json({ error: 'projectId is required' });
+        if (!projectId && !projectName) {
+            return res.status(400).json({ error: 'Either projectId or projectName must be provided' });
+        }
 
         const template = TEMPLATES.find(t => t.id === id);
         if (!template) return res.status(404).json({ error: 'Template not found' });
 
-        // Verify project ownership
         const auth = getAuth(req);
-        const { scopeWhere, scopeValues } = getScope(auth);
-
-        const projectCheck = await turso.execute(
-            `SELECT project_id FROM projects WHERE project_id = ? AND (${scopeWhere})`,
-            [projectId, ...scopeValues]
-        );
-        if (projectCheck.rows.length === 0) {
-            return res.status(404).json({ error: 'Project not found or you do not have permission' });
-        }
-
+        let targetProjectId = projectId;
         const now = new Date().toISOString();
+
+        if (projectId) {
+            // Validate existing project ownership
+            const { scopeWhere, scopeValues } = getScope(auth);
+            const projectCheck = await turso.execute(
+                `SELECT project_id FROM projects WHERE project_id = ? AND (${scopeWhere})`,
+                [projectId, ...scopeValues]
+            );
+            if (projectCheck.rows.length === 0) {
+                return res.status(404).json({ error: 'Project not found or you do not have permission' });
+            }
+        } else if (projectName) {
+            // Create a new project
+            targetProjectId = uuidv4();
+            const slug = await uniqueSlug(generateSlug(projectName));
+
+            await turso.execute(
+                `INSERT INTO projects (project_id, name, description, slug, user_id, org_id, is_public, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    targetProjectId,
+                    projectName,
+                    `Created from '${template.name}' template`,
+                    slug,
+                    auth.userId,
+                    auth.orgId || null,
+                    0,
+                    now,
+                    now
+                ]
+            );
+        }
         const createdMocks = [];
 
         // Insert Mocks & Responses
@@ -155,7 +208,7 @@ router.post('/:id/apply', async (req, res) => {
             await turso.execute(
                 `INSERT INTO mocks (mock_id, project_id, name, path, method, description, created_at, updated_at)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [mockId, projectId, mockData.name, mockData.path, mockData.method, mockData.description || '', now, now]
+                [mockId, targetProjectId, mockData.name, mockData.path, mockData.method, mockData.description || '', now, now]
             );
 
             for (const respData of mockData.responses) {
@@ -173,6 +226,7 @@ router.post('/:id/apply', async (req, res) => {
 
         res.status(201).json({
             message: `Template '${template.name}' applied successfully`,
+            projectId: targetProjectId,
             appliedMocks: createdMocks.length
         });
     } catch (error) {
