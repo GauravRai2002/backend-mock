@@ -14,6 +14,7 @@ const projectsRouter = require("./routes/projects");
 const mocksRouter = require("./routes/mocks");
 const organizationsRouter = require("./routes/organizations");
 const authenticate = require("./middleware/auth");
+const { mockExecutionLimiter, apiLimiter } = require("./middleware/rateLimiter");
 
 /**
  * Global middleware
@@ -43,19 +44,20 @@ app.use("/auth", authenticate, authRouter);
 
 /**
  * Mock execution — PUBLIC, no auth required.
- * Clients (and the frontend) hit this from anywhere.
+ * Rate limited: 100 requests per 15 minutes per IP per project.
  */
-app.use("/m", mockRouter);
+app.use("/m", mockExecutionLimiter, mockRouter);
 
 /**
  * Protected management routes
+ * Rate limited: 200 requests per 15 minutes per IP.
  */
-app.use("/projects", authenticate, projectsRouter);
-app.use("/", authenticate, mocksRouter);
-app.use("/organizations", authenticate, organizationsRouter);
+app.use("/projects", apiLimiter, authenticate, projectsRouter);
+app.use("/", apiLimiter, authenticate, mocksRouter);
+app.use("/organizations", apiLimiter, authenticate, organizationsRouter);
 
 // Legacy routes
-app.use("/users", authenticate, usersRouter);
+app.use("/users", apiLimiter, authenticate, usersRouter);
 
 /**
  * Start server
