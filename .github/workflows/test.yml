@@ -20,15 +20,11 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: backend-mock/package-lock.json
 
       - name: Install dependencies
         run: npm ci
-        working-directory: backend-mock
 
       - name: Run tests
         run: npm test
-        working-directory: backend-mock
         env:
           NODE_ENV: test
-          # No real DB credentials needed — tests use in-memory SQLite
