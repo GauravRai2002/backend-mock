@@ -1,4 +1,4 @@
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 
 /**
  * middleware/rateLimiter.js
@@ -24,9 +24,9 @@ const mockExecutionLimiter = rateLimit({
     max: 500,                  // 500 requests per window per IP
     standardHeaders: true,     // Return rate limit info in RateLimit-* headers
     legacyHeaders: false,      // Disable X-RateLimit-* headers
-    keyGenerator: (req) => {
+    keyGenerator: (req, res) => {
         // Use IP + project slug so different projects get independent limits
-        return `${req.ip}:${req.params?.projectSlug || 'global'}`;
+        return `${ipKeyGenerator(req, res)}:${req.params?.projectSlug || 'global'}`;
     },
     handler: (_req, res) => {
         res.status(429).json({
