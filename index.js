@@ -27,6 +27,12 @@ const authenticate = require("./middleware/auth");
 const { mockExecutionLimiter, apiLimiter } = require("./middleware/rateLimiter");
 
 /**
+ * Dodo Payments webhooks — MUST be mounted BEFORE express.json()
+ * so the raw body is preserved for signature verification.
+ */
+app.use("/webhooks", webhooksRouter);
+
+/**
  * Global middleware
  */
 app.use(express.json());
@@ -61,11 +67,7 @@ app.use("/auth", authenticate, authRouter);
  */
 app.use("/m", mockExecutionLimiter, mockRouter);
 
-/**
- * Dodo Payments webhooks — PUBLIC, no auth required.
- * Signature verification is handled inside the route.
- */
-app.use("/webhooks", webhooksRouter);
+
 
 /**
  * Protected management routes
