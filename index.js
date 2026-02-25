@@ -31,7 +31,10 @@ const { mockExecutionLimiter, apiLimiter } = require("./middleware/rateLimiter")
  */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true,
+}));
 
 /**
  * Clerk middleware — must come before any route that needs auth.
