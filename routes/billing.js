@@ -3,6 +3,8 @@ const router = express.Router();
 const { getAuth } = require('@clerk/express');
 const turso = require('../db');
 const { getPlanKey, getLimits, PLAN_LIMITS } = require('../middleware/billing');
+const DodoPayments = require('dodopayments').default || require('dodopayments');
+const DodoPayments = require('@dodopayments/dodopayments').default;
 
 /**
  * GET /billing/usage
@@ -97,37 +99,38 @@ router.post('/checkout-session', async (req, res) => {
         }
 
         // Determine API base URL: test_mode for development, live for production
-        const baseUrl = process.env.DODO_ENV === 'live'
-            ? 'https://live.dodopayments.com/api/v1'
-            : 'https://test.dodopayments.com/api/v1';
-
-        const response = await fetch(`${baseUrl}/checkouts`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-                product_cart: [{ product_id: productId, quantity: 1 }],
-                customer: { email, name: name || email },
-                metadata: {
-                    org_id: auth.orgId || '',
-                    user_id: auth.userId || '',
-                },
-                return_url: returnUrl || process.env.FRONTEND_URL + '/billing',
-            }),
+        // Determine API base URL: test_mode for development, live for production
+        const environment = process.env.DODO_ENV === 'live' ? 'live' : 'test_mode';
+        const dodo = new DodoPayments({
+            bearerToken: apiKey,
+            environment: environment,
         });
 
-        if (!response.ok) {
-            const errBody = await response.text();
-            console.error('Dodo checkout error:', response.status, errBody);
+        const session = await dodo.payments.create({
+            billing: {
+                city: '',
+                country: '',
+                state: '',
+                street: '',
+                zipcode: '',
+            },
+            customer: { email, name: name || email },
+            product_cart: [{ product_id: productId, quantity: 1 }],
+            return_url: returnUrl || process.env.FRONTEND_URL + '/billing',
+            metadata: {
+                org_id: auth.orgId || '',
+                user_id: auth.userId || '',
+            },
+        });
+
+        if (!session.checkout_url) {
+            console.error('Dodo checkout error: No checkout URL returned', session);
             return res.status(502).json({ error: 'Failed to create checkout session' });
         }
 
-        const session = await response.json();
         res.status(200).json({
             checkout_url: session.checkout_url,
-            session_id: session.session_id,
+            session_id: session.payment_id,
         });
     } catch (error) {
         console.error('POST /billing/checkout-session error:', error);
@@ -188,25 +191,14 @@ router.post('/cancel-subscription', async (req, res) => {
         const dodoSubId = result.rows[0].dodo_subscription_id;
         const apiKey = process.env.DODO_PAYMENTS_API_KEY;
 
-        const baseUrl = process.env.DODO_ENV === 'live'
-            ? 'https://live.dodopayments.com/api/v1'
-            : 'https://test.dodopayments.com/api/v1';
-
-        // Cancel via Dodo API
-        const response = await fetch(`${baseUrl}/subscriptions/${dodoSubId}`, {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({ status: 'cancelled' }),
+        const environment = process.env.DODO_ENV === 'live' ? 'live' : 'test_mode';
+        const dodo = new DodoPayments({
+            bearerToken: apiKey,
+            environment: environment,
         });
 
-        if (!response.ok) {
-            const errBody = await response.text();
-            console.error('Dodo cancel error:', response.status, errBody);
-            return res.status(502).json({ error: 'Failed to cancel subscription' });
-        }
+        // Cancel via Dodo API
+        await dodo.subscriptions.update(dodoSubId, { status: 'cancelled' });
 
         // Immediately update local DB (webhook will also confirm)
         await turso.execute(
