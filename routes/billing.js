@@ -4,7 +4,6 @@ const { getAuth } = require('@clerk/express');
 const turso = require('../db');
 const { getPlanKey, getLimits, PLAN_LIMITS } = require('../middleware/billing');
 const DodoPayments = require('dodopayments').default || require('dodopayments');
-const DodoPayments = require('@dodopayments/dodopayments').default;
 
 /**
  * GET /billing/usage
