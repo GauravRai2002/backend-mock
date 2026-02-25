@@ -38,6 +38,12 @@ function _cacheOrgPlan(orgId, planKey) {
     }
 }
 
+function clearOrgPlanCache(orgId) {
+    if (orgId) {
+        _orgPlanCache.delete(orgId);
+    }
+}
+
 /**
  * Fetch the org's plan from the local subscriptions table, cache it,
  * and return the plan key. Replaces the old Clerk Billing API call.
@@ -273,6 +279,7 @@ module.exports = {
     getPlanKey,
     getLimits,
     getOrgPlan,
+    clearOrgPlanCache,
     enforceProjectLimit,
     enforceMockLimit,
     enforceResponseLimit,
