@@ -105,14 +105,7 @@ router.post('/checkout-session', async (req, res) => {
             environment: environment,
         });
 
-        const session = await dodo.payments.create({
-            billing: {
-                city: '',
-                country: '',
-                state: '',
-                street: '',
-                zipcode: '',
-            },
+        const session = await dodo.checkoutSessions.create({
             customer: { email, name: name || email },
             product_cart: [{ product_id: productId, quantity: 1 }],
             return_url: returnUrl || process.env.FRONTEND_URL + '/billing',
@@ -122,14 +115,14 @@ router.post('/checkout-session', async (req, res) => {
             },
         });
 
-        if (!session.checkout_url) {
+        if (!session.url) {
             console.error('Dodo checkout error: No checkout URL returned', session);
             return res.status(502).json({ error: 'Failed to create checkout session' });
         }
 
         res.status(200).json({
-            checkout_url: session.checkout_url,
-            session_id: session.payment_id,
+            checkout_url: session.url,
+            session_id: session.session_id,
         });
     } catch (error) {
         console.error('POST /billing/checkout-session error:', error);
