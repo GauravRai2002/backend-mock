@@ -85,6 +85,24 @@ async function init() {
     )
   `);
 
+  // Subscriptions — tracks Dodo Payments subscription state per org/user
+  await turso.execute(`
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id TEXT PRIMARY KEY,
+      org_id TEXT,
+      user_id TEXT,
+      dodo_subscription_id TEXT UNIQUE,
+      dodo_customer_id TEXT,
+      product_id TEXT,
+      plan_key TEXT DEFAULT 'free_org',
+      status TEXT DEFAULT 'inactive',
+      current_period_start TEXT,
+      current_period_end TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
   console.log('✅ All tables created (or already exist).');
 
   // ── Migrations (safe to run multiple times) ──────────────────────────────

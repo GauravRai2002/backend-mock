@@ -407,19 +407,20 @@ router.post('/mocks/:id/duplicate', async (req, res) => {
 
         // Check mock-per-project limit before duplicating
         const { getLimits, getPlanKey } = require('../middleware/billing');
-        const limits = getLimits(auth);
+        const limits = await getLimits(auth);
         const countResult = await turso.execute(
             'SELECT COUNT(*) as count FROM mocks WHERE project_id = ?',
             [original.project_id]
         );
         const mockCount = Number(countResult.rows[0]?.count ?? 0);
         if (mockCount >= limits.maxMocksPerProject) {
+            const plan = await getPlanKey(auth);
             return res.status(403).json({
                 error: 'PLAN_LIMIT_REACHED',
                 message: `Your plan allows up to ${limits.maxMocksPerProject} mocks per project. Upgrade to create more.`,
                 limit: limits.maxMocksPerProject,
                 current: mockCount,
-                plan: getPlanKey(auth),
+                plan,
             });
         }
 

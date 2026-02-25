@@ -1,11 +1,11 @@
-const { getAuth, clerkClient } = require('@clerk/express');
+const { getAuth } = require('@clerk/express');
 const turso = require('../db');
 
 /**
  * Plan limits enforced across MockBird.
- * Plan keys match the slugs configured in Clerk Dashboard → Billing → Subscription Plans:
- *   "free_org" — Organization Plans → Free (always free)
- *   "pro"      — Organization Plans → Pro  ($20/month or $204/year)
+ * Plan keys:
+ *   "free_org" — Free tier (default for all orgs/users)
+ *   "pro"      — Pro tier (activated via Dodo Payments subscription)
  *
  * Personal workspaces (no org active) always receive free-tier limits.
  */
@@ -27,9 +27,7 @@ const PLAN_LIMITS = {
 };
 
 // ─── In-memory org plan cache ────────────────────────────────────────────────
-// Populated by:
-//   1. Every authenticated request (via getPlanKey → has() → cache)
-//   2. On-demand Clerk API lookup when cache misses on /m/ (via fetchAndCacheOrgPlan)
+// Populated by plan lookups from the local subscriptions table.
 
 const _orgPlanCache = new Map();
 const _PLAN_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
@@ -41,24 +39,18 @@ function _cacheOrgPlan(orgId, planKey) {
 }
 
 /**
- * Fetch the org's plan from Clerk Billing API, cache it, and return the key.
- * Called when the public /m/ endpoint has a cache miss — it needs to know
- * the plan but has no Clerk session to run has() against.
- *
- * Clerk returns a CommerceSubscription whose `subscriptionItems` array
- * contains one entry per plan. We look for an active item whose plan.slug
- * matches a key in PLAN_LIMITS (e.g. "pro"). Falls back to 'free_org'.
+ * Fetch the org's plan from the local subscriptions table, cache it,
+ * and return the plan key. Replaces the old Clerk Billing API call.
  */
 async function _fetchAndCacheOrgPlan(orgId) {
     try {
-        const subscription = await clerkClient.billing.getOrganizationBillingSubscription(orgId);
-        const activePlan = subscription?.subscriptionItems?.find(
-            (item) => item.status === 'active' && item.plan?.slug && item.plan.slug !== 'free_org'
+        const result = await turso.execute(
+            `SELECT plan_key FROM subscriptions
+             WHERE org_id = ? AND status = 'active'
+             ORDER BY updated_at DESC LIMIT 1`,
+            [orgId]
         );
-        const planKey = activePlan?.plan?.slug && PLAN_LIMITS[activePlan.plan.slug]
-            ? activePlan.plan.slug
-            : 'free_org';
-
+        const planKey = result.rows[0]?.plan_key || 'free_org';
         _cacheOrgPlan(orgId, planKey);
         return planKey;
     } catch (error) {
@@ -69,8 +61,8 @@ async function _fetchAndCacheOrgPlan(orgId) {
 }
 
 /**
- * Get the plan for an org, checking cache first and falling back to a
- * live Clerk API call when the cache is stale or empty.
+ * Get the plan for an org, checking cache first and falling back to
+ * a DB query when the cache is stale or empty.
  * Used by the mock-execution endpoint which has no Clerk session.
  */
 async function getOrgPlan(orgId) {
@@ -100,19 +92,17 @@ function _monthStartISO() {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Determine the org's plan from the Clerk session token.
- * Reads `has({ plan })` which is embedded in the JWT — no API call needed.
+ * Determine the org's plan from the local subscriptions table.
  * Also populates the in-memory cache so /m/ can use it later.
  */
-function getPlanKey(auth) {
-    if (!auth?.orgId || typeof auth.has !== 'function') return 'free_org';
-    const plan = auth.has({ plan: 'pro' }) ? 'pro' : 'free_org';
-    _cacheOrgPlan(auth.orgId, plan);
-    return plan;
+async function getPlanKey(auth) {
+    if (!auth?.orgId) return 'free_org';
+    return getOrgPlan(auth.orgId);
 }
 
-function getLimits(auth) {
-    return PLAN_LIMITS[getPlanKey(auth)];
+async function getLimits(auth) {
+    const plan = await getPlanKey(auth);
+    return PLAN_LIMITS[plan];
 }
 
 function _billingScope(auth) {
@@ -130,7 +120,7 @@ function _billingScope(auth) {
 async function enforceProjectLimit(req, res, next) {
     try {
         const auth = getAuth(req);
-        const limits = getLimits(auth);
+        const limits = await getLimits(auth);
         const { where, values } = _billingScope(auth);
 
         const result = await turso.execute(
@@ -139,12 +129,13 @@ async function enforceProjectLimit(req, res, next) {
         const current = Number(result.rows[0]?.count ?? 0);
 
         if (current >= limits.maxProjects) {
+            const plan = await getPlanKey(auth);
             return res.status(403).json({
                 error: 'PLAN_LIMIT_REACHED',
                 message: `Your plan allows up to ${limits.maxProjects} projects. Upgrade to create more.`,
                 limit: limits.maxProjects,
                 current,
-                plan: getPlanKey(auth),
+                plan,
             });
         }
         next();
@@ -162,7 +153,7 @@ async function enforceMockLimit(req, res, next) {
     try {
         const { projectId } = req.params;
         const auth = getAuth(req);
-        const limits = getLimits(auth);
+        const limits = await getLimits(auth);
 
         const result = await turso.execute(
             'SELECT COUNT(*) as count FROM mocks WHERE project_id = ?', [projectId]
@@ -170,12 +161,13 @@ async function enforceMockLimit(req, res, next) {
         const current = Number(result.rows[0]?.count ?? 0);
 
         if (current >= limits.maxMocksPerProject) {
+            const plan = await getPlanKey(auth);
             return res.status(403).json({
                 error: 'PLAN_LIMIT_REACHED',
                 message: `Your plan allows up to ${limits.maxMocksPerProject} mocks per project. Upgrade to create more.`,
                 limit: limits.maxMocksPerProject,
                 current,
-                plan: getPlanKey(auth),
+                plan,
             });
         }
         next();
@@ -193,7 +185,7 @@ async function enforceResponseLimit(req, res, next) {
     try {
         const { id } = req.params;
         const auth = getAuth(req);
-        const limits = getLimits(auth);
+        const limits = await getLimits(auth);
 
         const result = await turso.execute(
             'SELECT COUNT(*) as count FROM mock_responses WHERE mock_id = ?', [id]
@@ -201,12 +193,13 @@ async function enforceResponseLimit(req, res, next) {
         const current = Number(result.rows[0]?.count ?? 0);
 
         if (current >= limits.maxResponsesPerMock) {
+            const plan = await getPlanKey(auth);
             return res.status(403).json({
                 error: 'PLAN_LIMIT_REACHED',
                 message: `Your plan allows up to ${limits.maxResponsesPerMock} responses per mock. Upgrade to add more.`,
                 limit: limits.maxResponsesPerMock,
                 current,
-                plan: getPlanKey(auth),
+                plan,
             });
         }
         next();

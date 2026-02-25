@@ -22,6 +22,7 @@ const mocksRouter = require("./routes/mocks");
 const organizationsRouter = require("./routes/organizations");
 const templatesRouter = require("./routes/templates");
 const billingRouter = require("./routes/billing");
+const webhooksRouter = require("./routes/webhooks");
 const authenticate = require("./middleware/auth");
 const { mockExecutionLimiter, apiLimiter } = require("./middleware/rateLimiter");
 
@@ -56,6 +57,12 @@ app.use("/auth", authenticate, authRouter);
  * Rate limited: 100 requests per 15 minutes per IP per project.
  */
 app.use("/m", mockExecutionLimiter, mockRouter);
+
+/**
+ * Dodo Payments webhooks — PUBLIC, no auth required.
+ * Signature verification is handled inside the route.
+ */
+app.use("/webhooks", webhooksRouter);
 
 /**
  * Protected management routes

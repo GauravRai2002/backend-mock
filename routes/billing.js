@@ -12,8 +12,8 @@ const { getPlanKey, getLimits, PLAN_LIMITS } = require('../middleware/billing');
 router.get('/usage', async (req, res) => {
     try {
         const auth = getAuth(req);
-        const planKey = getPlanKey(auth);
-        const limits = getLimits(auth);
+        const planKey = await getPlanKey(auth);
+        const limits = await getLimits(auth);
 
         const isOrg = !!auth.orgId;
         const projectWhere = isOrg ? 'p.org_id = ?' : 'p.user_id = ? AND p.org_id IS NULL';
@@ -73,6 +73,153 @@ router.get('/plans', async (_req, res) => {
         ...limits,
     }));
     res.status(200).json({ data: plans });
+});
+
+/**
+ * POST /billing/checkout-session
+ * Creates a Dodo Payments checkout session for the Pro subscription.
+ * Body: { email, name, returnUrl? }
+ * Returns: { checkout_url, session_id }
+ */
+router.post('/checkout-session', async (req, res) => {
+    try {
+        const auth = getAuth(req);
+        const { email, name, returnUrl } = req.body;
+        const productId = process.env.DODO_PRO_PRODUCT_ID;
+        const apiKey = process.env.DODO_PAYMENTS_API_KEY;
+
+        if (!productId || !apiKey) {
+            return res.status(500).json({ error: 'Dodo Payments is not configured' });
+        }
+
+        if (!email) {
+            return res.status(400).json({ error: 'email is required' });
+        }
+
+        // Determine API base URL: test_mode for development, live for production
+        const baseUrl = process.env.DODO_ENV === 'live'
+            ? 'https://api.dodopayments.com'
+            : 'https://test.dodopayments.com';
+
+        const response = await fetch(`${baseUrl}/checkouts`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+                product_cart: [{ product_id: productId, quantity: 1 }],
+                customer: { email, name: name || email },
+                metadata: {
+                    org_id: auth.orgId || '',
+                    user_id: auth.userId || '',
+                },
+                return_url: returnUrl || process.env.FRONTEND_URL + '/billing',
+            }),
+        });
+
+        if (!response.ok) {
+            const errBody = await response.text();
+            console.error('Dodo checkout error:', response.status, errBody);
+            return res.status(502).json({ error: 'Failed to create checkout session' });
+        }
+
+        const session = await response.json();
+        res.status(200).json({
+            checkout_url: session.checkout_url,
+            session_id: session.session_id,
+        });
+    } catch (error) {
+        console.error('POST /billing/checkout-session error:', error);
+        res.status(500).json({ error: 'Failed to create checkout session' });
+    }
+});
+
+/**
+ * GET /billing/subscription
+ * Returns the current subscription details from the local DB.
+ */
+router.get('/subscription', async (req, res) => {
+    try {
+        const auth = getAuth(req);
+        const isOrg = !!auth.orgId;
+        const where = isOrg ? 'org_id = ?' : 'user_id = ? AND org_id IS NULL';
+        const values = isOrg ? [auth.orgId] : [auth.userId];
+
+        const result = await turso.execute(
+            `SELECT * FROM subscriptions WHERE ${where} ORDER BY updated_at DESC LIMIT 1`,
+            values
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(200).json({ subscription: null });
+        }
+
+        res.status(200).json({ subscription: result.rows[0] });
+    } catch (error) {
+        console.error('GET /billing/subscription error:', error);
+        res.status(500).json({ error: 'Failed to fetch subscription' });
+    }
+});
+
+/**
+ * POST /billing/cancel-subscription
+ * Cancels the active Dodo Payments subscription for the current org/user.
+ */
+router.post('/cancel-subscription', async (req, res) => {
+    try {
+        const auth = getAuth(req);
+        const isOrg = !!auth.orgId;
+        const where = isOrg ? 'org_id = ?' : 'user_id = ? AND org_id IS NULL';
+        const values = isOrg ? [auth.orgId] : [auth.userId];
+
+        // Find active subscription
+        const result = await turso.execute(
+            `SELECT dodo_subscription_id FROM subscriptions
+             WHERE ${where} AND status = 'active'
+             ORDER BY updated_at DESC LIMIT 1`,
+            values
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'No active subscription found' });
+        }
+
+        const dodoSubId = result.rows[0].dodo_subscription_id;
+        const apiKey = process.env.DODO_PAYMENTS_API_KEY;
+
+        const baseUrl = process.env.DODO_ENV === 'live'
+            ? 'https://api.dodopayments.com'
+            : 'https://test.dodopayments.com';
+
+        // Cancel via Dodo API
+        const response = await fetch(`${baseUrl}/subscriptions/${dodoSubId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({ status: 'cancelled' }),
+        });
+
+        if (!response.ok) {
+            const errBody = await response.text();
+            console.error('Dodo cancel error:', response.status, errBody);
+            return res.status(502).json({ error: 'Failed to cancel subscription' });
+        }
+
+        // Immediately update local DB (webhook will also confirm)
+        await turso.execute(
+            `UPDATE subscriptions SET status = 'cancelled', plan_key = 'free_org', updated_at = datetime('now')
+             WHERE dodo_subscription_id = ?`,
+            [dodoSubId]
+        );
+
+        res.status(200).json({ cancelled: true });
+    } catch (error) {
+        console.error('POST /billing/cancel-subscription error:', error);
+        res.status(500).json({ error: 'Failed to cancel subscription' });
+    }
 });
 
 function _monthStartISO() {
