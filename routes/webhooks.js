@@ -28,7 +28,22 @@ router.post('/dodo', express.raw({ type: '*/*' }), async (req, res) => {
         }
 
         // Verify signature
-        const wh = new Webhook(webhookSecret);
+        // standardwebhooks expects the secret as base64-encoded.
+        // Dodo webhook keys may come as "whsec_<base64>" or raw strings.
+        let secret = webhookSecret;
+
+        // Strip the whsec_ prefix if present — standardwebhooks handles it,
+        // but we need to ensure the remaining part is valid base64.
+        const hasPrefix = secret.startsWith('whsec_');
+        const rawSecret = hasPrefix ? secret.slice(6) : secret;
+
+        // Check if it looks like valid base64; if not, encode it
+        const isBase64 = /^[A-Za-z0-9+/=]+$/.test(rawSecret) && rawSecret.length % 4 === 0;
+        if (!isBase64) {
+            secret = (hasPrefix ? 'whsec_' : '') + Buffer.from(rawSecret).toString('base64');
+        }
+
+        const wh = new Webhook(secret);
         const rawBody = typeof req.body === 'string' ? req.body : req.body.toString('utf8');
 
         const webhookHeaders = {
