@@ -3,6 +3,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { getAuth } = require('@clerk/express');
 const turso = require('../db');
+const { enforceProjectLimit } = require('../middleware/billing');
 
 // Helper: generate URL-safe slug from name
 function generateSlug(name) {
@@ -61,8 +62,8 @@ router.get('/', async (req, res) => {
 
 // ─── CREATE ───────────────────────────────────────────────────────────────────
 
-// POST /projects
-router.post('/', async (req, res) => {
+// POST /projects — enforces plan-based project limit before creation
+router.post('/', enforceProjectLimit, async (req, res) => {
     try {
         const auth = getAuth(req);
         const { name, description, isPublic } = req.body;
@@ -224,8 +225,8 @@ router.get('/:id/stats', async (req, res) => {
 
 // ─── DUPLICATE ────────────────────────────────────────────────────────────────
 
-// POST /projects/:id/duplicate
-router.post('/:id/duplicate', async (req, res) => {
+// POST /projects/:id/duplicate — also counts against the project limit
+router.post('/:id/duplicate', enforceProjectLimit, async (req, res) => {
     try {
         const auth = getAuth(req);
         const { id } = req.params;

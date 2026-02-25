@@ -113,6 +113,34 @@ async function init() {
     // Column already exists — ignore
   }
 
+  // Add response_headers and response_body to request_logs (logged by mock execution)
+  try {
+    await turso.execute("ALTER TABLE request_logs ADD COLUMN response_headers TEXT DEFAULT '{}'");
+    console.log('🔄 Migration: added response_headers column to request_logs');
+  } catch (e) {
+    // Column already exists — ignore
+  }
+  try {
+    await turso.execute("ALTER TABLE request_logs ADD COLUMN response_body TEXT DEFAULT ''");
+    console.log('🔄 Migration: added response_body column to request_logs');
+  } catch (e) {
+    // Column already exists — ignore
+  }
+
+  // Add expected_body and expected_headers to mocks
+  try {
+    await turso.execute("ALTER TABLE mocks ADD COLUMN expected_body TEXT DEFAULT ''");
+    console.log('🔄 Migration: added expected_body column to mocks');
+  } catch (e) {
+    // Column already exists — ignore
+  }
+  try {
+    await turso.execute("ALTER TABLE mocks ADD COLUMN expected_headers TEXT DEFAULT '{}'");
+    console.log('🔄 Migration: added expected_headers column to mocks');
+  } catch (e) {
+    // Column already exists — ignore
+  }
+
   process.exit(0);
 }
 

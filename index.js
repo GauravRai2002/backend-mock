@@ -21,6 +21,7 @@ const projectsRouter = require("./routes/projects");
 const mocksRouter = require("./routes/mocks");
 const organizationsRouter = require("./routes/organizations");
 const templatesRouter = require("./routes/templates");
+const billingRouter = require("./routes/billing");
 const authenticate = require("./middleware/auth");
 const { mockExecutionLimiter, apiLimiter } = require("./middleware/rateLimiter");
 
@@ -64,6 +65,7 @@ app.use("/projects", apiLimiter, authenticate, projectsRouter);
 app.use("/templates", apiLimiter, authenticate, templatesRouter);
 app.use("/", apiLimiter, authenticate, mocksRouter);
 app.use("/organizations", apiLimiter, authenticate, organizationsRouter);
+app.use("/billing", apiLimiter, authenticate, billingRouter);
 
 // Legacy routes
 app.use("/users", apiLimiter, authenticate, usersRouter);
