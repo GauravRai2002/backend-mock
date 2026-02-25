@@ -98,8 +98,8 @@ router.post('/checkout-session', async (req, res) => {
 
         // Determine API base URL: test_mode for development, live for production
         const baseUrl = process.env.DODO_ENV === 'live'
-            ? 'https://api.dodopayments.com'
-            : 'https://test.dodopayments.com';
+            ? 'https://live.dodopayments.com/api/v1'
+            : 'https://test.dodopayments.com/api/v1';
 
         const response = await fetch(`${baseUrl}/checkouts`, {
             method: 'POST',
@@ -189,8 +189,8 @@ router.post('/cancel-subscription', async (req, res) => {
         const apiKey = process.env.DODO_PAYMENTS_API_KEY;
 
         const baseUrl = process.env.DODO_ENV === 'live'
-            ? 'https://api.dodopayments.com'
-            : 'https://test.dodopayments.com';
+            ? 'https://live.dodopayments.com/api/v1'
+            : 'https://test.dodopayments.com/api/v1';
 
         // Cancel via Dodo API
         const response = await fetch(`${baseUrl}/subscriptions/${dodoSubId}`, {
