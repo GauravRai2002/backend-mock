@@ -3,6 +3,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const turso = require('../db');
 const { matchPath, evaluateCondition, responseMatchesConditions, pickResponse } = require('../utils/execution');
+const { checkMonthlyQuota, incrementMonthlyCounter } = require('../middleware/billing');
 
 /**
  * Find the best matching mock for a given project, path, and method.
@@ -118,7 +119,18 @@ router.all('/:projectSlug/{*path}', async (req, res) => {
             });
         }
 
-        // 2. Find matching mock
+        // 2. Check monthly request quota for the project's org/owner
+        const quota = await checkMonthlyQuota(project.org_id, project.user_id);
+        if (!quota.allowed) {
+            return res.status(429).json({
+                error: 'MONTHLY_QUOTA_EXCEEDED',
+                message: 'This project has exceeded its monthly request quota. The project owner can upgrade their plan for more requests.',
+                used: quota.used,
+                limit: quota.limit,
+            });
+        }
+
+        // 3. Find matching mock
         const match = await findMatchingMock(project.project_id, mockPath, method);
         if (!match) {
             const elapsed = Date.now() - startTime;
@@ -135,7 +147,7 @@ router.all('/:projectSlug/{*path}', async (req, res) => {
 
         const { mock, pathParams } = match;
 
-        // 3. Fetch responses for this mock
+        // 4. Fetch responses for this mock
         const responsesResult = await turso.execute(
             'SELECT * FROM mock_responses WHERE mock_id = ? ORDER BY is_default DESC, created_at ASC',
             [mock.mock_id]
@@ -149,13 +161,13 @@ router.all('/:projectSlug/{*path}', async (req, res) => {
             });
         }
 
-        // 4. Apply delay
+        // 5. Apply delay
         const delay = mock.response_delay_ms || 0;
         if (delay > 0) {
             await new Promise((resolve) => setTimeout(resolve, delay));
         }
 
-        // 5. Parse and set response headers
+        // 6. Parse and set response headers
         let headers = {};
         try {
             headers = typeof response.headers === 'string' ? JSON.parse(response.headers) : (response.headers || {});
@@ -180,7 +192,8 @@ router.all('/:projectSlug/{*path}', async (req, res) => {
 
         const elapsed = Date.now() - startTime;
 
-        // 6. Log the request (fire and forget)
+        // 7. Log the request and count it against the monthly quota
+        incrementMonthlyCounter(project.org_id, project.user_id);
         logRequest({
             mockId: mock.mock_id,
             projectId: project.project_id,
@@ -191,7 +204,7 @@ router.all('/:projectSlug/{*path}', async (req, res) => {
             responseBody: response.body || ''
         });
 
-        // 7. Send response
+        // 8. Send response
         res.status(response.status_code).send(response.body || '');
 
     } catch (error) {

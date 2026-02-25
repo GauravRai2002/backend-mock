@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getAuth } = require('@clerk/express');
 const turso = require('../db');
 const authenticate = require('../middleware/auth');
+const { enforceMockLimit, enforceResponseLimit } = require('../middleware/billing');
 
 // All routes in this file are protected
 router.use(authenticate);
@@ -52,8 +53,8 @@ router.get('/projects/:projectId/mocks', async (req, res) => {
     }
 });
 
-// POST /projects/:projectId/mocks
-router.post('/projects/:projectId/mocks', async (req, res) => {
+// POST /projects/:projectId/mocks — enforces plan-based mock limit
+router.post('/projects/:projectId/mocks', enforceMockLimit, async (req, res) => {
     try {
         const { projectId } = req.params;
         const { name, path, method, description, responseType, responseDelay, expectedBody, expectedHeaders } = req.body;
@@ -222,8 +223,8 @@ router.get('/mocks/:id/responses', async (req, res) => {
     }
 });
 
-// POST /mocks/:id/responses
-router.post('/mocks/:id/responses', async (req, res) => {
+// POST /mocks/:id/responses — enforces plan-based response limit
+router.post('/mocks/:id/responses', enforceResponseLimit, async (req, res) => {
     try {
         const { id } = req.params;
         const { name, statusCode, headers, body, isDefault, weight, conditions } = req.body;
@@ -388,7 +389,7 @@ router.get('/mocks/:id/request-logs', async (req, res) => {
 
 // ─── DUPLICATE ────────────────────────────────────────────────────────────────
 
-// POST /mocks/:id/duplicate — clone a single mock with all its responses
+// POST /mocks/:id/duplicate — clone a single mock (counts against mock limit)
 router.post('/mocks/:id/duplicate', async (req, res) => {
     try {
         const { id } = req.params;
@@ -403,6 +404,25 @@ router.post('/mocks/:id/duplicate', async (req, res) => {
         );
         const original = mockResult.rows[0];
         if (!original) return res.status(404).json({ error: 'Mock not found' });
+
+        // Check mock-per-project limit before duplicating
+        const { getLimits, getPlanKey } = require('../middleware/billing');
+        const limits = await getLimits(auth);
+        const countResult = await turso.execute(
+            'SELECT COUNT(*) as count FROM mocks WHERE project_id = ?',
+            [original.project_id]
+        );
+        const mockCount = Number(countResult.rows[0]?.count ?? 0);
+        if (mockCount >= limits.maxMocksPerProject) {
+            const plan = await getPlanKey(auth);
+            return res.status(403).json({
+                error: 'PLAN_LIMIT_REACHED',
+                message: `Your plan allows up to ${limits.maxMocksPerProject} mocks per project. Upgrade to create more.`,
+                limit: limits.maxMocksPerProject,
+                current: mockCount,
+                plan,
+            });
+        }
 
         const newMockId = uuidv4();
         const now = new Date().toISOString();

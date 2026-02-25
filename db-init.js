@@ -85,6 +85,24 @@ async function init() {
     )
   `);
 
+  // Subscriptions — tracks Dodo Payments subscription state per org/user
+  await turso.execute(`
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id TEXT PRIMARY KEY,
+      org_id TEXT,
+      user_id TEXT,
+      dodo_subscription_id TEXT UNIQUE,
+      dodo_customer_id TEXT,
+      product_id TEXT,
+      plan_key TEXT DEFAULT 'free_org',
+      status TEXT DEFAULT 'inactive',
+      current_period_start TEXT,
+      current_period_end TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
   console.log('✅ All tables created (or already exist).');
 
   // ── Migrations (safe to run multiple times) ──────────────────────────────
@@ -109,6 +127,34 @@ async function init() {
   try {
     await turso.execute("ALTER TABLE mock_responses ADD COLUMN conditions TEXT DEFAULT '[]'");
     console.log('🔄 Migration: added conditions column to mock_responses');
+  } catch (e) {
+    // Column already exists — ignore
+  }
+
+  // Add response_headers and response_body to request_logs (logged by mock execution)
+  try {
+    await turso.execute("ALTER TABLE request_logs ADD COLUMN response_headers TEXT DEFAULT '{}'");
+    console.log('🔄 Migration: added response_headers column to request_logs');
+  } catch (e) {
+    // Column already exists — ignore
+  }
+  try {
+    await turso.execute("ALTER TABLE request_logs ADD COLUMN response_body TEXT DEFAULT ''");
+    console.log('🔄 Migration: added response_body column to request_logs');
+  } catch (e) {
+    // Column already exists — ignore
+  }
+
+  // Add expected_body and expected_headers to mocks
+  try {
+    await turso.execute("ALTER TABLE mocks ADD COLUMN expected_body TEXT DEFAULT ''");
+    console.log('🔄 Migration: added expected_body column to mocks');
+  } catch (e) {
+    // Column already exists — ignore
+  }
+  try {
+    await turso.execute("ALTER TABLE mocks ADD COLUMN expected_headers TEXT DEFAULT '{}'");
+    console.log('🔄 Migration: added expected_headers column to mocks');
   } catch (e) {
     // Column already exists — ignore
   }
