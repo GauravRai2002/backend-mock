@@ -99,8 +99,8 @@ router.post('/checkout-session', async (req, res) => {
         }
 
         // Determine API base URL: test_mode for development, live for production
-        // Determine API base URL: test_mode for development, live for production
-        const environment = process.env.DODO_ENV === 'live' ? 'live' : 'test_mode';
+        // Determine API environment: test_mode for development, live_mode for production
+        const environment = process.env.DODO_ENV === 'live' ? 'live_mode' : 'test_mode';
         const dodo = new DodoPayments({
             bearerToken: apiKey,
             environment: environment,
@@ -191,7 +191,7 @@ router.post('/cancel-subscription', async (req, res) => {
         const dodoSubId = result.rows[0].dodo_subscription_id;
         const apiKey = process.env.DODO_PAYMENTS_API_KEY;
 
-        const environment = process.env.DODO_ENV === 'live' ? 'live' : 'test_mode';
+        const environment = process.env.DODO_ENV === 'live' ? 'live_mode' : 'test_mode';
         const dodo = new DodoPayments({
             bearerToken: apiKey,
             environment: environment,
