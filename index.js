@@ -23,6 +23,7 @@ const organizationsRouter = require("./routes/organizations");
 const templatesRouter = require("./routes/templates");
 const billingRouter = require("./routes/billing");
 const webhooksRouter = require("./routes/webhooks");
+const aiRouter = require("./routes/ai");
 const authenticate = require("./middleware/auth");
 const { mockExecutionLimiter, apiLimiter } = require("./middleware/rateLimiter");
 
@@ -75,6 +76,7 @@ app.use("/m", mockExecutionLimiter, mockRouter);
  */
 app.use("/projects", apiLimiter, authenticate, projectsRouter);
 app.use("/templates", apiLimiter, authenticate, templatesRouter);
+app.use("/ai", apiLimiter, authenticate, aiRouter);
 app.use("/", apiLimiter, authenticate, mocksRouter);
 app.use("/organizations", apiLimiter, authenticate, organizationsRouter);
 app.use("/billing", apiLimiter, authenticate, billingRouter);
@@ -110,8 +112,10 @@ turso.execute(`
   console.error('⚠️  subscriptions table migration error:', err?.message || err);
 });
 
-app.listen(PORT, () => {
-  console.log(`🐦 MockBird API running on port ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`🐦 MockBird API running on port ${PORT}`);
+  });
+}
 
 module.exports = app;

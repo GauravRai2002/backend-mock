@@ -88,6 +88,69 @@ router.post('/', enforceProjectLimit, async (req, res) => {
     }
 });
 
+// POST /projects/batch-create — consumes the exact array structure returned by /ai/generate/project
+router.post('/batch-create', enforceProjectLimit, async (req, res) => {
+    try {
+        const auth = getAuth(req);
+        const { name, description, isPublic, endpoints } = req.body;
+
+        if (!name) return res.status(400).json({ error: 'name is required' });
+        if (!Array.isArray(endpoints)) return res.status(400).json({ error: 'endpoints array is required' });
+
+        const projectId = uuidv4();
+        const slug = await uniqueSlug(generateSlug(name));
+        const now = new Date().toISOString();
+
+        // 1. Create the base project
+        await turso.execute(
+            `INSERT INTO projects (project_id, name, description, slug, user_id, org_id, is_public, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [projectId, name, description || '', slug, auth.userId, auth.orgId || null, isPublic ? 1 : 0, now, now]
+        );
+
+        // 2. Iterate through endpoints and create mock routes and their scenarios
+        // We use a sequential approach to ensure foreign key integrity
+        for (const ep of endpoints) {
+            const mockId = uuidv4();
+
+            await turso.execute(
+                `INSERT INTO mocks (mock_id, project_id, name, path, method, description, is_active, response_type, response_delay_ms, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [mockId, projectId, ep.description || 'Generated Mock', ep.route, ep.method || 'GET', ep.description || '',
+                    1, 'json', 0, now, now]
+            );
+
+            if (Array.isArray(ep.scenarios)) {
+                let isDefaultSet = false;
+
+                for (let i = 0; i < ep.scenarios.length; i++) {
+                    const scenario = ep.scenarios[i];
+                    // Make the first 2xx scenario the default automatically, otherwise default to first item
+                    const shouldBeDefault = !isDefaultSet && (scenario.status >= 200 && scenario.status < 300 || i === 0);
+                    if (shouldBeDefault) isDefaultSet = true;
+
+                    // The AI returns responseBody as a JSON object, so stringify it for DB storage
+                    const bodyString = typeof scenario.responseBody === 'object'
+                        ? JSON.stringify(scenario.responseBody)
+                        : (scenario.responseBody || '');
+
+                    await turso.execute(
+                        `INSERT INTO mock_responses (response_id, mock_id, name, status_code, headers, body, is_default, weight, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        [uuidv4(), mockId, scenario.name || 'Scenario', scenario.status || 200, '{}', bodyString, shouldBeDefault ? 1 : 0, 100, now]
+                    );
+                }
+            }
+        }
+
+        const result = await turso.execute('SELECT * FROM projects WHERE project_id = ?', [projectId]);
+        res.status(201).json({ data: result.rows[0], message: "Project and endpoints fully generated." });
+    } catch (error) {
+        console.error('Batch create project error:', error);
+        res.status(500).json({ error: 'Failed to batch create project' });
+    }
+});
+
 // ─── READ ─────────────────────────────────────────────────────────────────────
 
 // GET /projects/:id  (includes mocks array)
