@@ -115,13 +115,13 @@ router.post('/checkout-session', async (req, res) => {
             },
         });
 
-        if (!session.url) {
+        if (!session.checkout_url) {
             console.error('Dodo checkout error: No checkout URL returned', session);
             return res.status(502).json({ error: 'Failed to create checkout session' });
         }
 
         res.status(200).json({
-            checkout_url: session.url,
+            checkout_url: session.checkout_url,
             session_id: session.session_id,
         });
     } catch (error) {
