@@ -3,6 +3,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const turso = require('../db');
 const { getAuth } = require('@clerk/express');
+const { ensureUserExists } = require('../utils/userSync');
 
 function getScope(auth) {
     if (auth.orgId) {
@@ -679,6 +680,10 @@ router.post('/:id/apply', async (req, res) => {
         if (!template) return res.status(404).json({ error: 'Template not found' });
 
         const auth = getAuth(req);
+
+        // Lazily ensure user exists before potentially creating a new project
+        await ensureUserExists(auth.userId);
+
         let targetProjectId = projectId;
         const now = new Date().toISOString();
 

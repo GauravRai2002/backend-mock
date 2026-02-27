@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getAuth } = require('@clerk/express');
 const turso = require('../db');
 const { enforceProjectLimit } = require('../middleware/billing');
+const { ensureUserExists } = require('../utils/userSync');
 
 // Helper: generate URL-safe slug from name
 function generateSlug(name) {
@@ -66,6 +67,10 @@ router.get('/', async (req, res) => {
 router.post('/', enforceProjectLimit, async (req, res) => {
     try {
         const auth = getAuth(req);
+
+        // Lazily ensure user exists to prevent SQLite FOREIGN KEY errors
+        await ensureUserExists(auth.userId);
+
         const { name, description, isPublic } = req.body;
 
         if (!name) return res.status(400).json({ error: 'name is required' });
@@ -92,6 +97,10 @@ router.post('/', enforceProjectLimit, async (req, res) => {
 router.post('/batch-create', enforceProjectLimit, async (req, res) => {
     try {
         const auth = getAuth(req);
+
+        // Lazily ensure user exists to prevent SQLite FOREIGN KEY errors
+        await ensureUserExists(auth.userId);
+
         const { name, description, isPublic, endpoints } = req.body;
 
         if (!name) return res.status(400).json({ error: 'name is required' });
@@ -292,6 +301,10 @@ router.get('/:id/stats', async (req, res) => {
 router.post('/:id/duplicate', enforceProjectLimit, async (req, res) => {
     try {
         const auth = getAuth(req);
+
+        // Lazily ensure user exists to prevent SQLite FOREIGN KEY errors
+        await ensureUserExists(auth.userId);
+
         const { id } = req.params;
         const { scopeWhere, scopeValues } = getScope(auth);
 
